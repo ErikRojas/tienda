@@ -5,31 +5,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Simple con Loyverse - Erik</title>
     <style>
-        /* Mantengo el estilo anterior que te gustó – dos columnas */
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
-        .container { display: flex; gap: 25px; max-width: 1400px; margin: 0 auto; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: #f9f9f9; 
+        }
+        .container {
+            display: flex;
+            gap: 25px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
         .products-section { flex: 3; }
-        .cart-section { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: sticky; top: 20px; height: fit-content; }
-        input, button { padding: 10px; margin: 8px 0; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; }
-        button { background: #4CAF50; color: white; border: none; cursor: pointer; }
+        .cart-section { 
+            flex: 1; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            position: sticky; 
+            top: 20px; 
+            height: fit-content; 
+        }
+        input, button { 
+            padding: 10px; 
+            margin: 8px 0; 
+            font-size: 16px; 
+            border-radius: 4px; 
+            border: 1px solid #ccc; 
+            width: 100%; 
+            box-sizing: border-box; 
+        }
+        button { 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            cursor: pointer; 
+        }
         button:hover { background: #45a049; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; background: white; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 15px 0; 
+            background: white; 
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            text-align: left; 
+        }
         th { background-color: #f2f2f2; }
-        .cart-total { font-weight: bold; font-size: 1.5em; margin: 15px 0; color: #d32f2f; text-align: right; }
+        .cart-total { 
+            font-weight: bold; 
+            font-size: 1.5em; 
+            margin: 15px 0; 
+            color: #d32f2f; 
+            text-align: right; 
+        }
         .error { color: red; font-weight: bold; }
         .success { color: green; font-weight: bold; }
         h1 { text-align: center; margin-bottom: 20px; }
-        @media (max-width: 900px) { .container { flex-direction: column; } .cart-section { position: static; } }
+        @media (max-width: 900px) { 
+            .container { flex-direction: column; } 
+            .cart-section { position: static; } 
+        }
     </style>
 </head>
 <body>
-    <h1>POS Simple con Loyverse 2</h1>
+    <h1>POS Simple con Loyverse</h1>
 
     <div style="max-width: 600px; margin: 0 auto 20px;">
-        <label for="accessToken">Access Token:</label><br>
-        <input type="text" id="accessToken" placeholder="Ej: ab6c88c610dc4bc0abc0cad899900ff3">
-        
         <label for="storeId">Store ID:</label><br>
         <input type="text" id="storeId" placeholder="Ej: 78731809-f60c-4b28-9910-edfb8df5186c">
         
@@ -43,7 +89,14 @@
             <h2>Productos</h2>
             <input type="text" id="searchInput" placeholder="Buscar por nombre, SKU o barcode..." oninput="filterItems()">
             <table id="productsTable">
-                <thead><tr><th>Nombre</th><th>SKU</th><th>Precio</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>SKU</th>
+                        <th>Precio</th>
+                        <th></th>
+                    </tr>
+                </thead>
                 <tbody id="productsBody"></tbody>
             </table>
         </div>
@@ -51,7 +104,15 @@
         <div class="cart-section">
             <h2>Carrito</h2>
             <table id="cartTable">
-                <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Cant.</th>
+                        <th>Precio</th>
+                        <th>Subtotal</th>
+                        <th></th>
+                    </tr>
+                </thead>
                 <tbody id="cartBody"></tbody>
             </table>
             <div class="cart-total">Total: 0.00 BOB</div>
@@ -66,59 +127,182 @@
     <script>
         let allItems = [];
         let cart = [];
-        const proxyPrefix = 'https://api.codetabs.com/v1/proxy?quest=';  // proxy cambiado
+        const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 
         async function loadItems() {
-            console.log("Botón clicado – loadItems iniciado");  // Depuración
-
-            const token = document.getElementById('accessToken').value.trim();
+            console.log("Iniciando carga de productos...");
             const storeId = document.getElementById('storeId').value.trim();
             const status = document.getElementById('statusMessage');
 
-            if (!token || !storeId) {
-                status.innerHTML = '<span class="error">Ingresa token y store ID primero.</span>';
-                console.log("Validación falló: token o storeId vacío");
+            if (!storeId) {
+                status.innerHTML = '<span class="error">Ingresa el Store ID primero.</span>';
                 return;
             }
 
             status.innerHTML = 'Cargando productos... (puede tardar)';
 
             allItems = [];
-            let url = 'https://api.loyverse.com/v1.0/items?limit=250';
-            const headers = { 'Authorization': `Bearer ${token}` };
+            let urlPath = '/v1.0/items?limit=250';
 
-            console.log("Iniciando fetch con proxy:", proxyPrefix + url);
-
-            while (url) {
+            while (urlPath) {
                 try {
-                    const proxiedUrl = proxyPrefix + encodeURIComponent(url);
-                    console.log("Fetch a:", proxiedUrl);
-                    const response = await fetch(proxiedUrl, { headers });
+                    const response = await fetch(workerUrl + urlPath);
+                    console.log("Respuesta del Worker:", response.status);
 
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP ${response.status} - ${errorText}`);
+                        const err = await response.text();
+                        throw new Error(`Error ${response.status}: ${err}`);
                     }
 
                     const data = await response.json();
                     allItems = allItems.concat(data.items || []);
+
                     const cursor = data.cursor;
-                    url = cursor ? `https://api.loyverse.com/v1.0/items?limit=250&cursor=${cursor}` : null;
+                    urlPath = cursor ? `/v1.0/items?limit=250&cursor=${cursor}` : null;
                 } catch (error) {
                     status.innerHTML = `<span class="error">Error al cargar: ${error.message}</span>`;
-                    console.error("Error en fetch:", error);
+                    console.error("Error completo:", error);
                     return;
                 }
             }
 
             displayItems(allItems);
             status.innerHTML = `<span class="success">¡Cargados ${allItems.length} productos!</span>`;
-            console.log("Carga completada – items:", allItems.length);
+            console.log("Productos cargados:", allItems.length);
         }
 
-        // ... (el resto del script: displayItems, filterItems, addToCart, updateCart, registerSale con payment_type_id, etc.)
-        // Copia las funciones restantes de tu versión anterior que ya funcionaba (addToCart, updateCart, registerSale con el fix de payment_type_id, etc.)
-        // No las repito aquí para no alargar, pero asegúrate de que estén completas.
+        function displayItems(items) {
+            const tbody = document.getElementById('productsBody');
+            tbody.innerHTML = '';
+            const storeId = document.getElementById('storeId').value.trim();
+
+            items.forEach(item => {
+                item.variants.forEach(variant => {
+                    const storeInfo = variant.stores.find(s => s.store_id === storeId);
+                    if (storeInfo && storeInfo.available_for_sale) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${item.item_name}</td>
+                            <td>${variant.sku || '-'}</td>
+                            <td>${storeInfo.price.toFixed(2)}</td>
+                            <td><button onclick="addToCart('${item.item_name}', '${variant.variant_id}', ${storeInfo.price})">Agregar</button></td>
+                        `;
+                        tbody.appendChild(row);
+                    }
+                });
+            });
+        }
+
+        function filterItems() {
+            const search = document.getElementById('searchInput').value.toLowerCase().trim();
+            const filtered = allItems.filter(item => 
+                item.item_name.toLowerCase().includes(search) ||
+                item.variants.some(v => 
+                    (v.sku && v.sku.toLowerCase().includes(search)) || 
+                    (v.barcode && v.barcode.toLowerCase().includes(search))
+                )
+            );
+            displayItems(filtered);
+        }
+
+        function addToCart(name, variantId, price) {
+            const existing = cart.find(i => i.variantId === variantId);
+            if (existing) {
+                existing.quantity += 1;
+            } else {
+                cart.push({ name, variantId, price, quantity: 1 });
+            }
+            updateCart();
+        }
+
+        function updateCart() {
+            const tbody = document.getElementById('cartBody');
+            tbody.innerHTML = '';
+            let total = 0;
+
+            cart.forEach((item, index) => {
+                const subtotal = item.price * item.quantity;
+                total += subtotal;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.name}</td>
+                    <td><input type="number" min="1" value="${item.quantity}" style="width:60px;" onchange="updateQuantity(${index}, this.value)"></td>
+                    <td>${item.price.toFixed(2)}</td>
+                    <td>${subtotal.toFixed(2)}</td>
+                    <td><button onclick="removeFromCart(${index})" style="background:#f44336;">X</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.querySelector('.cart-total').textContent = `Total: ${total.toFixed(2)} BOB`;
+        }
+
+        function updateQuantity(index, qty) {
+            cart[index].quantity = parseInt(qty) || 1;
+            updateCart();
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCart();
+        }
+
+        function clearCart() {
+            cart = [];
+            updateCart();
+            document.getElementById('changeMessage').textContent = '';
+        }
+
+        async function registerSale() {
+            const storeId = document.getElementById('storeId').value.trim();
+            const payment = parseFloat(document.getElementById('paymentAmount').value) || 0;
+            const total = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+            const changeMsg = document.getElementById('changeMessage');
+
+            if (cart.length === 0) {
+                changeMsg.innerHTML = '<span class="error">El carrito está vacío.</span>';
+                return;
+            }
+            if (payment < total) {
+                changeMsg.innerHTML = '<span class="error">Monto pagado insuficiente.</span>';
+                return;
+            }
+
+            const receipt = {
+                receipt_type: "SALE",
+                store_id: storeId,
+                line_items: cart.map(item => ({
+                    variant_id: item.variantId,
+                    quantity: item.quantity,
+                    price: item.price
+                })),
+                payments: [{
+                    type: "CASH",
+                    amount: payment,
+                    payment_type_id: "f3e7a7b7-9b1a-4d5e-8c2f-6d7e9f0a1b2c"
+                }]
+            };
+
+            try {
+                const response = await fetch(workerUrl + '/v1.0/receipts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(receipt)
+                });
+
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(`Error ${response.status}: ${err}`);
+                }
+
+                const change = payment - total;
+                changeMsg.innerHTML = `<span class="success">¡Venta registrada! Cambio: ${change.toFixed(2)} BOB</span>`;
+                clearCart();
+            } catch (error) {
+                changeMsg.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+                console.error("Error en venta:", error);
+            }
+        }
     </script>
 </body>
 </html>
