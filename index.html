@@ -85,7 +85,8 @@
 
             while (url) {
                 try {
-                    const response = await fetch(url, { headers });
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const response = await fetch(proxyUrl, { headers });
                     if (!response.ok) {
                         throw new Error(`Error: ${response.status} - ${await response.text()}`);
                     }
