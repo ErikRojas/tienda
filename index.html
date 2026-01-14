@@ -106,7 +106,7 @@ async function loadAllData() {
     status.innerHTML = '🔄 Cargando artículos y stock...';
     try {
         const [invRaw, catRaw, itemsRaw] = await Promise.all([
-            fetchAll('/v1.0/inventory', 'inventory'),
+            fetchAll('/v1.0/inventory', 'inventory_levels'),
             fetchAll('/v1.0/categories', 'categories'),
             fetchAll('/v1.0/items', 'items')
         ]);
