@@ -5,51 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Loyverse Pro</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f7f6; padding:20px; color: #333; }
-        h1 { text-align:center; color: #2c3e50; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; }
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
-        
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .cart { 
-            flex:1; background:#fff; padding:20px; border-radius:8px; 
-            box-shadow:0 4px 15px rgba(0,0,0,.1); 
-            position:sticky; top:20px; align-self:flex-start;
-            max-height:calc(100vh - 40px); overflow-y:auto;
-        }
-
-        input { width:100%; padding:12px; margin:8px 0; border:1px solid #ccc; border-radius:4px; box-sizing: border-box; }
-        button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; transition: 0.3s; }
+        .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; align-self:flex-start; }
+        input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:4px; box-sizing: border-box; }
+        button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; font-weight: bold; }
         .btn-add { background:#4CAF50; color:#fff; }
-        .btn-add:hover { background:#45a049; }
         .btn-add:disabled { background:#ccc; cursor:not-allowed; }
-        
-        table { width:100%; border-collapse:collapse; margin-top:10px; }
-        th, td { border-bottom:1px solid #eee; padding:12px; text-align: left; }
-        th { background:#f8f9fa; color: #666; text-transform: uppercase; font-size: 12px; }
-
-        .total { font-size:1.6em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
-        .error { color:red; font-weight:bold; }
-        .success { color:green; font-weight:bold; }
-        .status-bar { background: #ebf5fb; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; font-size: 0.9em; }
-
-        @media(max-width:900px){
-            .container{flex-direction:column;}
-            .cart{position:static; max-height:none;}
-        }
+        table { width:100%; border-collapse:collapse; }
+        th, td { border-bottom:1px solid #eee; padding:10px; text-align: left; }
+        th { background:#f8f9fa; font-size: 12px; color: #777; }
+        .total { font-size:1.8em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
+        .status-bar { background: #2c3e50; color: white; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; }
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
     </style>
 </head>
 <body>
 
-<h1>Terminal de Venta</h1>
-
-<div id="statusMessage" class="status-bar">Iniciando sistema...</div>
+<div id="statusMessage" class="status-bar">Sincronizando con Loyverse...</div>
 
 <div class="container">
     <div class="products">
-        <h2>Inventario</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Inventario Real</h2>
+            <button onclick="loadItems()" style="width: auto; background: #3498db; color: white; padding: 5px 15px;">🔄 Actualizar Stock</button>
+        </div>
         <div style="display: flex; gap: 10px;">
-            <input id="barcodeInput" placeholder="Escaneé código de barras..." autofocus>
-            <input id="searchInput" placeholder="Buscar por nombre o categoría..." oninput="filterItems()">
+            <input id="barcodeInput" placeholder="Escaneo rápido de código..." autofocus>
+            <input id="searchInput" placeholder="Buscar producto o categoría..." oninput="filterItems()">
         </div>
 
         <table>
@@ -57,7 +42,7 @@
                 <tr>
                     <th>Producto</th>
                     <th>Categoría</th>
-                    <th>Barcode</th>
+                    <th>Código</th>
                     <th>Stock</th>
                     <th>Precio</th>
                     <th>Acción</th>
@@ -69,14 +54,9 @@
 
     <div class="cart">
         <h2>Carrito</h2>
-        <table>
+        <table id="cartTable">
             <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>Cant.</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
+                <tr><th>Item</th><th>Cant</th><th>Sub</th><th></th></tr>
             </thead>
             <tbody id="cartBody"></tbody>
         </table>
@@ -84,45 +64,42 @@
         <div class="total" id="totalLabel">0.00 BOB</div>
 
         <label>Monto Recibido</label>
-        <input type="number" id="paymentAmount" step="0.10" placeholder="0.00" oninput="updateChange()">
+        <input type="number" id="paymentAmount" step="0.5" placeholder="0.00" oninput="updateChange()">
+        <div id="changeMessage" style="margin-bottom: 10px; font-weight: bold;"></div>
 
-        <p id="changeMessage"></p>
-
-        <button class="btn-add" onclick="registerSale()" style="background: #2196F3;">Finalizar Venta</button>
-        <button onclick="clearCart()" style="background:#f44336; color: white;">Vaciar Carrito</button>
+        <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
+        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">Vaciar Carrito</button>
     </div>
 </div>
 
-<audio id="beep">
-  <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg">
-</audio>
+<audio id="beep"><source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
 const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 let items = [];
 let cart = [];
 
-/* --- Utilidades --- */
-function getTotal() { return cart.reduce((s, i) => s + (i.price * i.qty), 0); }
-
-/* --- 1. Cargar Stock --- */
+/* --- CARGA DE DATOS --- */
 async function loadInventory() {
     let inventory = {};
+    // Intentamos cargar inventario sin filtros para obtener todo lo disponible
     let url = '/v1.0/inventory?limit=250';
     try {
         while (url) {
             const res = await fetch(workerUrl + url);
             const data = await res.json();
-            (data.inventory || []).forEach(i => {
-                inventory[i.variant_id] = i.in_stock;
-            });
+            if (data.inventory) {
+                data.inventory.forEach(i => {
+                    // Sumamos stock si la variante aparece en múltiples tiendas
+                    inventory[i.variant_id] = (inventory[i.variant_id] || 0) + (i.in_stock || 0);
+                });
+            }
             url = data.cursor ? `/v1.0/inventory?limit=250&cursor=${data.cursor}` : null;
         }
-    } catch(e) { console.error("Error stock:", e); }
+    } catch(e) { console.error("Error en Stock:", e); }
     return inventory;
 }
 
-/* --- 2. Cargar Categorías --- */
 async function loadCategories() {
     let categories = {};
     let url = '/v1.0/categories?limit=250';
@@ -130,188 +107,126 @@ async function loadCategories() {
         while (url) {
             const res = await fetch(workerUrl + url);
             const data = await res.json();
-            (data.categories || []).forEach(c => {
-                categories[c.id] = c.name;
-            });
+            if (data.categories) {
+                data.categories.forEach(c => categories[c.id] = c.name);
+            }
             url = data.cursor ? `/v1.0/categories?limit=250&cursor=${data.cursor}` : null;
         }
-    } catch(e) { console.error("Error categorías:", e); }
+    } catch(e) { console.error("Error en Categorías:", e); }
     return categories;
 }
 
-/* --- 3. Cargar Todo --- */
 async function loadItems() {
     const status = document.getElementById('statusMessage');
-    status.innerHTML = '🔄 Sincronizando con Loyverse...';
-
-    const [inventory, categories] = await Promise.all([
-        loadInventory(),
-        loadCategories()
-    ]);
-
-    items = [];
-    let url = '/v1.0/items?limit=250';
-
+    status.innerHTML = '⏳ Conectando con Loyverse...';
+    
     try {
+        const [inventory, categories] = await Promise.all([loadInventory(), loadCategories()]);
+        items = [];
+        let url = '/v1.0/items?limit=250';
+
         while (url) {
             const res = await fetch(workerUrl + url);
             const data = await res.json();
-
-            (data.items || []).forEach(item => {
-                item.variants.forEach(variant => {
-                    variant.stores.forEach(store => {
-                        if (store.available_for_sale) {
-                            items.push({
-                                name: variant.variant_name !== 'Default' ? `${item.item_name} (${variant.variant_name})` : item.item_name,
-                                category: categories[item.category_id] || 'General',
-                                barcode: variant.barcode || '',
-                                variantId: variant.variant_id,
-                                price: store.price || 0,
-                                stock: inventory[variant.variant_id] ?? 0
-                            });
-                        }
+            if (data.items) {
+                data.items.forEach(item => {
+                    item.variants.forEach(v => {
+                        v.stores.forEach(s => {
+                            if (s.available_for_sale) {
+                                items.push({
+                                    name: v.variant_name !== 'Default' ? `${item.item_name} (${v.variant_name})` : item.item_name,
+                                    category: categories[item.category_id] || 'General',
+                                    barcode: v.barcode || '',
+                                    variantId: v.variant_id,
+                                    price: s.price || 0,
+                                    stock: inventory[v.variant_id] ?? 0
+                                });
+                            }
+                        });
                     });
                 });
-            });
+            }
             url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
         }
         renderProducts(items);
-        status.innerHTML = `<span class="success">✅ ${items.length} Productos listos</span>`;
-    } catch(e) {
-        status.innerHTML = `<span class="error">❌ Error de conexión</span>`;
+        status.innerHTML = `✅ <span class="success">${items.length} Productos sincronizados</span>`;
+    } catch (e) {
+        status.innerHTML = `<span class="error">❌ Error de conexión. Revisa el Proxy.</span>`;
     }
 }
 
-/* --- Renderizado --- */
+/* --- LÓGICA DE CARRITO --- */
 function renderProducts(list) {
     const tb = document.getElementById('productsBody');
     tb.innerHTML = '';
-
     list.forEach(i => {
+        const out = i.stock <= 0;
         const r = document.createElement('tr');
-        const isOutOfStock = i.stock <= 0;
-        
         r.innerHTML = `
             <td>${i.name}</td>
             <td>${i.category}</td>
-            <td><small>${i.barcode || '-'}</small></td>
-            <td><b style="color:${isOutOfStock ? 'red':'black'}">${i.stock}</b></td>
+            <td><small>${i.barcode}</small></td>
+            <td style="color:${out?'red':'green'}"><b>${i.stock}</b></td>
             <td>${i.price.toFixed(2)}</td>
-            <td>
-                <button class="btn-add" ${isOutOfStock ? 'disabled' : ''} onclick="addItemToCartById('${i.variantId}')">
-                    ${isOutOfStock ? 'Agotado' : '+ Agregar'}
-                </button>
-            </td>
+            <td><button class="btn-add" ${out?'disabled':''} onclick="addToCartByVId('${i.variantId}')">${out?'S/S':'+'}</button></td>
         `;
         tb.appendChild(r);
     });
 }
 
-function addItemToCartById(vId) {
+function addToCartByVId(vId) {
     const item = items.find(x => x.variantId === vId);
-    if (item) addToCart(item);
-}
-
-function addToCart(item) {
-    if (item.stock <= 0) return;
-
+    if (!item || item.stock <= 0) return;
     document.getElementById('beep').play();
-    const existing = cart.find(i => i.variantId === item.variantId);
-    
-    if (existing) {
-        existing.qty++;
-    } else {
-        cart.push({ ...item, qty: 1 });
-    }
-    
+    const ex = cart.find(c => c.variantId === vId);
+    if (ex) ex.qty++; else cart.push({...item, qty: 1});
     item.stock--;
     updateCart();
     renderProducts(items);
 }
 
 function updateCart() {
-    const cartBody = document.getElementById('cartBody');
-    cartBody.innerHTML = '';
-    
+    const cb = document.getElementById('cartBody');
+    cb.innerHTML = '';
     cart.forEach((i, idx) => {
         const r = document.createElement('tr');
-        r.innerHTML = `
-            <td>${i.name}</td>
-            <td>${i.qty}</td>
-            <td>${(i.price * i.qty).toFixed(2)}</td>
-            <td><button onclick="removeItem(${idx})" style="background:none; color:red; border:none; cursor:pointer;">✕</button></td>
-        `;
-        cartBody.appendChild(r);
+        r.innerHTML = `<td>${i.name}</td><td>${i.qty}</td><td>${(i.price*i.qty).toFixed(2)}</td>
+        <td><button onclick="removeItem(${idx})" style="background:none; color:red; border:none;">✕</button></td>`;
+        cb.appendChild(r);
     });
-    
-    document.getElementById('totalLabel').textContent = `${getTotal().toFixed(2)} BOB`;
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    document.getElementById('totalLabel').textContent = `${total.toFixed(2)} BOB`;
     updateChange();
 }
 
 function removeItem(idx) {
-    const cartItem = cart[idx];
-    const originalItem = items.find(x => x.variantId === cartItem.variantId);
-    if (originalItem) originalItem.stock += cartItem.qty;
-    
+    const original = items.find(x => x.variantId === cart[idx].variantId);
+    if (original) original.stock += cart[idx].qty;
     cart.splice(idx, 1);
     updateCart();
     renderProducts(items);
 }
 
-function filterItems() {
-    const term = document.getElementById('searchInput').value.toLowerCase();
-    const filtered = items.filter(i => 
-        i.name.toLowerCase().includes(term) || 
-        i.category.toLowerCase().includes(term) ||
-        i.barcode.includes(term)
-    );
-    renderProducts(filtered);
-}
-
 function updateChange() {
     const pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
-    const total = getTotal();
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const msg = document.getElementById('changeMessage');
-    
-    if (pay <= 0) { msg.innerHTML = ''; return; }
-    
-    if (pay < total) {
-        msg.innerHTML = `<span class="error">Faltan ${(total - pay).toFixed(2)} BOB</span>`;
-    } else {
-        msg.innerHTML = `<span class="success">Cambio: ${(pay - total).toFixed(2)} BOB</span>`;
-    }
+    if (pay <= 0) msg.innerHTML = '';
+    else if (pay < total) msg.innerHTML = `<span class="error">Falta: ${(total-pay).toFixed(2)}</span>`;
+    else msg.innerHTML = `<span class="success">Cambio: ${(pay-total).toFixed(2)}</span>`;
 }
 
-function clearCart() {
-    cart.forEach(c => {
-        const original = items.find(x => x.variantId === c.variantId);
-        if (original) original.stock += c.qty;
-    });
-    cart = [];
-    updateCart();
-    renderProducts(items);
-    document.getElementById('paymentAmount').value = '';
+function filterItems() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    renderProducts(items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.includes(q)));
 }
 
-// Escáner de código de barras
-document.getElementById('barcodeInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-        const code = e.target.value.trim();
-        const item = items.find(i => i.barcode === code);
-        if (item) {
-            addToCart(item);
-        } else {
-            alert('Producto no encontrado');
-        }
-        e.target.value = '';
-    }
-});
-
+/* --- VENTA E IMPRESIÓN --- */
 async function registerSale() {
-    if (!cart.length) return alert('El carrito está vacío');
+    if (!cart.length) return alert('Carrito vacío');
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     
-    const status = document.getElementById('statusMessage');
-    status.innerHTML = '⏳ Registrando venta...';
+    document.getElementById('statusMessage').innerHTML = '⏳ Registrando en Loyverse...';
 
     try {
         const res = await fetch(workerUrl + '/v1.0/receipts', {
@@ -319,33 +234,74 @@ async function registerSale() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 receipt_type: 'SALE',
-                line_items: cart.map(i => ({
-                    variant_id: i.variantId,
-                    quantity: i.qty
-                })),
-                payments: [{
-                    payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58',
-                    amount: getTotal()
-                }]
+                line_items: cart.map(i => ({ variant_id: i.variantId, quantity: i.qty })),
+                payments: [{ payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58', amount: total }]
             })
         });
 
         if (res.ok) {
-            alert('Venta exitosa');
-            cart = []; // Limpiamos sin devolver stock porque la venta ya se hizo
+            if (confirm('✅ Venta registrada con éxito. ¿Desea imprimir el ticket?')) {
+                printTicket();
+            }
+            cart = [];
             updateCart();
-            loadItems(); // Recargamos stock real desde Loyverse
+            loadItems(); // Recarga stock real
         } else {
-            alert('Error al registrar venta en Loyverse');
+            alert('Error al registrar la venta.');
         }
-    } catch (e) {
-        alert('Error de red');
-    }
+    } catch (e) { alert('Error de conexión con el servidor.'); }
 }
 
-// Iniciar carga
+function printTicket() {
+    const win = window.open('', '', 'width=300');
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const fecha = new Date().toLocaleString();
+
+    win.document.write(`
+        <html><body style="font-family:monospace; width:100%; font-size:12px;">
+            <div style="text-align:center;">
+                <h3>MI TIENDA</h3>
+                <p>${fecha}</p>
+                <hr>
+            </div>
+            <table style="width:100%; font-size:12px;">
+                ${cart.map(i => `
+                    <tr>
+                        <td colspan="2">${i.name}</td>
+                    </tr>
+                    <tr>
+                        <td>${i.qty} x ${i.price.toFixed(2)}</td>
+                        <td style="text-align:right;">${(i.qty*i.price).toFixed(2)}</td>
+                    </tr>
+                `).join('')}
+            </table>
+            <hr>
+            <div style="text-align:right; font-size:14px;">
+                <b>TOTAL: ${total.toFixed(2)} BOB</b>
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+                <p>¡Gracias por su compra!</p>
+            </div>
+            <script>window.onload = function() { window.print(); window.close(); }</script>
+        </body></html>
+    `);
+    win.document.close();
+}
+
+function clearCart() {
+    cart.forEach(c => { const o = items.find(x => x.variantId === c.variantId); if(o) o.stock += c.qty; });
+    cart = []; updateCart(); renderProducts(items);
+}
+
+document.getElementById('barcodeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        const i = items.find(x => x.barcode === e.target.value.trim());
+        if (i) addToCartByVId(i.variantId);
+        e.target.value = '';
+    }
+});
+
 loadItems();
 </script>
-
 </body>
 </html>
