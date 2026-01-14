@@ -3,34 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Punto de Venta Loyverse</title>
+    <title>POS Loyverse v3</title>
     <style>
-        body { font-family: sans-serif; background:#f4f7f6; padding:20px; color: #333; margin:0; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; margin:0; }
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; height: fit-content; }
         input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:4px; box-sizing: border-box; }
         button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; font-weight: bold; }
         .btn-add { background:#4CAF50; color:#fff; }
-        .btn-add:hover { background:#45a049; }
         table { width:100%; border-collapse:collapse; }
         th, td { border-bottom:1px solid #eee; padding:10px; text-align: left; }
+        th { background:#f8f9fa; font-size: 11px; color: #888; text-transform: uppercase; }
         .total { font-size:1.8em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
         .status-bar { background: #2c3e50; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 4px; }
+        .stock-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
-<div id="statusMessage" class="status-bar">Conectando...</div>
+<div id="statusMessage" class="status-bar">Inicializando...</div>
 
 <div class="container">
     <div class="products">
-        <h2>Productos</h2>
-        <input id="barcodeInput" placeholder="Escanear o escribir código...">
-        <input id="searchInput" placeholder="Buscar por nombre o categoría..." oninput="filterItems()">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h2>Inventario</h2>
+            <button onclick="loadItems()" style="width:auto; font-size:12px; padding:5px 15px; background:#3498db; color:white;">🔄 Refrescar Datos</button>
+        </div>
+        <input id="barcodeInput" placeholder="Escaneo de código de barras...">
+        <input id="searchInput" placeholder="Buscar por nombre, categoría o código..." oninput="filterItems()">
         <table>
             <thead>
-                <tr><th>Producto</th><th>Categoría</th><th>Código</th><th>Stock</th><th>Precio</th><th></th></tr>
+                <tr>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th>Barcode/SKU</th>
+                    <th>Stock</th>
+                    <th>Precio</th>
+                    <th></th>
+                </tr>
             </thead>
             <tbody id="productsBody"></tbody>
         </table>
@@ -46,8 +57,8 @@
         <label>Monto Pagado</label>
         <input type="number" id="paymentAmount" placeholder="0.00" oninput="updateChange()">
         <div id="changeMessage" style="margin-bottom:10px; font-weight:bold"></div>
-        <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
-        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">LIMPIAR CARRITO</button>
+        <button onclick="registerSale()" style="background: #27ae60; color: white;">REGISTRAR VENTA</button>
+        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">VACIAR TODO</button>
     </div>
 </div>
 
@@ -58,57 +69,65 @@ const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 let items = [];
 let cart = [];
 
-// CARGAR INVENTARIO
-async function loadInventory() {
-    let inventory = {};
+// 1. Obtener niveles de inventario (Stock)
+async function getInventory() {
+    var invMap = {};
     try {
-        const res = await fetch(workerUrl + '/v1.0/inventory?limit=250');
-        const data = await res.json();
+        var res = await fetch(workerUrl + '/v1.0/inventory?limit=250');
+        var data = await res.json();
         if (data.inventory) {
-            data.inventory.forEach(function(i) {
-                inventory[i.variant_id] = i.in_stock;
+            data.inventory.forEach(function(record) {
+                // Sumamos el stock disponible en todas las tiendas registradas
+                invMap[record.variant_id] = (invMap[record.variant_id] || 0) + (record.in_stock || 0);
             });
         }
-    } catch(e) { console.log("Error stock:", e); }
-    return inventory;
+    } catch(e) { console.error("Error cargando inventario:", e); }
+    return invMap;
 }
 
-// CARGAR CATEGORIAS
-async function loadCategories() {
-    let categories = {};
+// 2. Obtener nombres de categorías
+async function getCategories() {
+    var catMap = {};
     try {
-        const res = await fetch(workerUrl + '/v1.0/categories?limit=250');
-        const data = await res.json();
+        var res = await fetch(workerUrl + '/v1.0/categories?limit=250');
+        var data = await res.json();
         if (data.categories) {
-            data.categories.forEach(function(c) { categories[c.id] = c.name; });
+            data.categories.forEach(function(c) { catMap[c.id] = c.name; });
         }
-    } catch(e) { console.log("Error cat:", e); }
-    return categories;
+    } catch(e) { console.error("Error cargando categorías:", e); }
+    return catMap;
 }
 
-// CARGAR ARTICULOS
+// 3. Cargar artículos y cruzar datos
 async function loadItems() {
-    const status = document.getElementById('statusMessage');
-    status.innerHTML = 'Sincronizando con Loyverse...';
+    var status = document.getElementById('statusMessage');
+    status.innerHTML = '🔄 Sincronizando stock y productos...';
+    
     try {
-        const inv = await loadInventory();
-        const cats = await loadCategories();
+        // Ejecutamos carga de stock y categorías primero
+        var [stockData, categoryData] = await Promise.all([getInventory(), getCategories()]);
+        
         items = [];
-        const res = await fetch(workerUrl + '/v1.0/items?limit=250');
-        const data = await res.json();
+        var res = await fetch(workerUrl + '/v1.0/items?limit=250');
+        var data = await res.json();
         
         if (data.items) {
             data.items.forEach(function(item) {
                 item.variants.forEach(function(v) {
                     v.stores.forEach(function(s) {
                         if (s.available_for_sale) {
+                            var currentStock = stockData[v.variant_id];
+                            // Si el seguimiento está activo pero no hay registro, es 0. 
+                            // Si no tiene seguimiento, mostramos "-"
+                            var stockDisplay = (currentStock !== undefined) ? currentStock : '-';
+                            
                             items.push({
                                 name: v.variant_name !== 'Default' ? item.item_name + ' (' + v.variant_name + ')' : item.item_name,
-                                category: cats[item.category_id] || 'General',
-                                barcode: v.barcode || '',
+                                category: categoryData[item.category_id] || 'General',
+                                barcode: v.barcode || v.sku || '',
                                 variantId: v.variant_id,
                                 price: s.price || 0,
-                                stock: inv[v.variant_id] !== undefined ? inv[v.variant_id] : '-'
+                                stock: stockDisplay
                             });
                         }
                     });
@@ -116,49 +135,53 @@ async function loadItems() {
             });
         }
         renderProducts(items);
-        status.innerHTML = 'Listo: ' + items.length + ' productos cargados';
-    } catch (e) { status.innerHTML = 'Error al cargar datos'; }
+        status.innerHTML = '✅ Conectado: ' + items.length + ' productos actualizados';
+    } catch (e) { 
+        status.innerHTML = '❌ Error de conexión con Loyverse';
+        console.error(e);
+    }
 }
 
 function renderProducts(list) {
-    const tb = document.getElementById('productsBody');
+    var tb = document.getElementById('productsBody');
     tb.innerHTML = '';
     list.forEach(function(i) {
-        const r = document.createElement('tr');
-        // Botón siempre habilitado aunque el stock sea 0 o guion
-        r.innerHTML = '<td>'+i.name+'</td><td>'+i.category+'</td><td>'+i.barcode+'</td><td>'+i.stock+'</td><td>'+i.price.toFixed(2)+'</td><td><button class="btn-add" onclick="addToCartByVId(\''+i.variantId+'\')">+</button></td>';
+        var r = document.createElement('tr');
+        var stockStyle = i.stock <= 0 && i.stock !== '-' ? 'color:red; font-weight:bold;' : 'color:green;';
+        
+        r.innerHTML = '<td>' + i.name + '</td>' +
+                      '<td>' + i.category + '</td>' +
+                      '<td><small>' + i.barcode + '</small></td>' +
+                      '<td style="' + stockStyle + '">' + i.stock + '</td>' +
+                      '<td>' + i.price.toFixed(2) + '</td>' +
+                      '<td><button class="btn-add" onclick="addToCartByVId(\'' + i.variantId + '\')">+</button></td>';
         tb.appendChild(r);
     });
 }
 
 function addToCartByVId(vId) {
-    const item = items.find(function(x) { return x.variantId === vId; });
+    var item = items.find(function(x) { return x.variantId === vId; });
     if (!item) return;
     
     document.getElementById('beep').play();
-    const ex = cart.find(function(c) { return c.variantId === vId; });
+    var ex = cart.find(function(c) { return c.variantId === vId; });
     if (ex) {
         ex.qty++;
     } else {
-        cart.push({
-            variantId: item.variantId,
-            name: item.name,
-            price: item.price,
-            qty: 1
-        });
+        cart.push({ variantId: item.variantId, name: item.name, price: item.price, qty: 1 });
     }
     updateCart();
 }
 
 function updateCart() {
-    const cb = document.getElementById('cartBody');
+    var cb = document.getElementById('cartBody');
     cb.innerHTML = '';
-    let total = 0;
+    var total = 0;
     cart.forEach(function(i, idx) {
-        const subtotal = i.price * i.qty;
-        total += subtotal;
-        const r = document.createElement('tr');
-        r.innerHTML = '<td>'+i.name+'</td><td>'+i.qty+'</td><td>'+subtotal.toFixed(2)+'</td><td><button onclick="removeItem('+idx+')">✕</button></td>';
+        var sub = i.price * i.qty;
+        total += sub;
+        var r = document.createElement('tr');
+        r.innerHTML = '<td>' + i.name + '</td><td>' + i.qty + '</td><td>' + sub.toFixed(2) + '</td><td><button onclick="removeItem(' + idx + ')" style="background:none; color:red; border:none; cursor:pointer;">✕</button></td>';
         cb.appendChild(r);
     });
     document.getElementById('totalLabel').textContent = total.toFixed(2) + ' BOB';
@@ -171,88 +194,84 @@ function removeItem(idx) {
 }
 
 function updateChange() {
-    const pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
-    const total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
-    const msg = document.getElementById('changeMessage');
+    var pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
+    var total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
+    var msg = document.getElementById('changeMessage');
     if (pay <= 0) {
         msg.innerHTML = '';
     } else {
-        const diff = pay - total;
+        var diff = pay - total;
         msg.innerHTML = diff < 0 ? 'Falta: ' + Math.abs(diff).toFixed(2) : 'Cambio: ' + diff.toFixed(2);
         msg.style.color = diff < 0 ? 'red' : 'green';
     }
 }
 
 function filterItems() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    const filtered = items.filter(function(i) {
-        return i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.includes(q);
+    var q = document.getElementById('searchInput').value.toLowerCase();
+    var filtered = items.filter(function(i) {
+        return i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.toLowerCase().includes(q);
     });
     renderProducts(filtered);
 }
 
 async function registerSale() {
-    if (cart.length === 0) return alert('El carrito está vacío');
-    const total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
+    if (cart.length === 0) return alert('Carrito vacío');
+    var total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
     
     try {
-        const res = await fetch(workerUrl + '/v1.0/receipts', {
+        var res = await fetch(workerUrl + '/v1.0/receipts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 receipt_type: 'SALE',
-                line_items: cart.map(function(i) { 
-                    return { variant_id: i.variantId, quantity: i.qty }; 
-                }),
-                payments: [{ 
-                    payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58', 
-                    amount: total 
-                }]
+                line_items: cart.map(function(i) { return { variant_id: i.variantId, quantity: i.qty }; }),
+                payments: [{ payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58', amount: total }]
             })
         });
         
         if (res.ok) {
-            if (confirm('Venta registrada. ¿Desea imprimir el ticket?')) {
+            if (confirm('✅ Venta registrada correctamente. ¿Imprimir ticket?')) {
                 printTicket(total);
             }
             cart = [];
             document.getElementById('paymentAmount').value = '';
             updateCart();
-            loadItems(); // Recarga para intentar actualizar stock si cambió
+            loadItems(); // Recarga para ver el nuevo stock
         } else {
-            alert('Error al registrar la venta en Loyverse');
+            alert('Error en Loyverse. Revisa el tipo de pago.');
         }
-    } catch (e) { alert('Error de conexión'); }
+    } catch (e) { alert('Error de red'); }
 }
 
 function printTicket(total) {
-    const win = window.open('', '', 'width=300');
-    let h = '<html><body style="font-family:monospace;padding:10px;">';
-    h += '<h3 style="text-align:center">TICKET DE VENTA</h3><hr>';
+    var win = window.open('', '', 'width=300');
+    var h = '<html><body style="font-family:monospace;padding:10px; font-size:12px;">';
+    h += '<h3 style="text-align:center">COMPROBANTE</h3><hr>';
     cart.forEach(function(i) {
         h += '<p>' + i.name + '<br>' + i.qty + ' x ' + i.price.toFixed(2) + ' = ' + (i.qty*i.price).toFixed(2) + '</p>';
     });
     h += '<hr><h3 style="text-align:right">TOTAL: ' + total.toFixed(2) + ' BOB</h3>';
+    h += '<p style="text-align:center">¡Gracias!</p>';
     h += '<script>window.onload=function(){window.print();window.close();}<\/script></body></html>';
     win.document.write(h);
     win.document.close();
 }
-
-document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        const code = e.target.value.trim();
-        const found = items.find(function(i) { return i.barcode === code; });
-        if (found) addToCartByVId(found.variantId);
-        e.target.value = '';
-    }
-});
 
 function clearCart() {
     cart = [];
     updateCart();
 }
 
-// Iniciar
+// Escáner
+document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        var code = e.target.value.trim();
+        var found = items.find(function(i) { return i.barcode === code; });
+        if (found) addToCartByVId(found.variantId);
+        e.target.value = '';
+    }
+});
+
 loadItems();
 </script>
 </body>
