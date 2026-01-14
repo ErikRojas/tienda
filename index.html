@@ -3,41 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS Loyverse v3</title>
+    <title>POS Loyverse Pro</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; margin:0; }
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; height: fit-content; }
-        input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:4px; box-sizing: border-box; }
+        input { width:100%; padding:12px; margin:8px 0; border:2px solid #3498db; border-radius:4px; box-sizing: border-box; font-size: 16px; }
         button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; font-weight: bold; }
         .btn-add { background:#4CAF50; color:#fff; }
         table { width:100%; border-collapse:collapse; }
         th, td { border-bottom:1px solid #eee; padding:10px; text-align: left; }
         th { background:#f8f9fa; font-size: 11px; color: #888; text-transform: uppercase; }
         .total { font-size:1.8em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
-        .status-bar { background: #2c3e50; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 4px; }
-        .stock-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
+        .status-bar { background: #2c3e50; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 4px; font-weight: bold; }
+        #barcodeInput { background: #e8f4fd; } /* Color especial para el escáner */
     </style>
 </head>
 <body>
 
-<div id="statusMessage" class="status-bar">Inicializando...</div>
+<div id="statusMessage" class="status-bar">Inicializando sistema...</div>
 
 <div class="container">
     <div class="products">
         <div style="display:flex; justify-content: space-between; align-items: center;">
-            <h2>Inventario</h2>
-            <button onclick="loadItems()" style="width:auto; font-size:12px; padding:5px 15px; background:#3498db; color:white;">🔄 Refrescar Datos</button>
+            <h2>Inventario Completo</h2>
+            <button onclick="loadAllData()" style="width:auto; font-size:12px; padding:5px 15px; background:#3498db; color:white;">🔄 Sincronizar Todo</button>
         </div>
-        <input id="barcodeInput" placeholder="Escaneo de código de barras...">
-        <input id="searchInput" placeholder="Buscar por nombre, categoría o código..." oninput="filterItems()">
+        
+        <input id="barcodeInput" placeholder="SISTEMA LISTO: Escanee ahora mismo..." autofocus>
+        <input id="searchInput" placeholder="O busque manualmente por nombre..." oninput="filterItems()">
+        
         <table>
             <thead>
                 <tr>
                     <th>Producto</th>
                     <th>Categoría</th>
-                    <th>Barcode/SKU</th>
+                    <th>Código/SKU</th>
                     <th>Stock</th>
                     <th>Precio</th>
                     <th></th>
@@ -49,16 +51,13 @@
 
     <div class="cart">
         <h2>Carrito</h2>
-        <table>
+        <table id="cartTable">
             <thead><tr><th>Item</th><th>Cant</th><th>Sub</th><th></th></tr></thead>
             <tbody id="cartBody"></tbody>
         </table>
         <div class="total" id="totalLabel">0.00 BOB</div>
-        <label>Monto Pagado</label>
-        <input type="number" id="paymentAmount" placeholder="0.00" oninput="updateChange()">
-        <div id="changeMessage" style="margin-bottom:10px; font-weight:bold"></div>
-        <button onclick="registerSale()" style="background: #27ae60; color: white;">REGISTRAR VENTA</button>
-        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">VACIAR TODO</button>
+        <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
+        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">VACIAR</button>
     </div>
 </div>
 
@@ -69,123 +68,115 @@ const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 let items = [];
 let cart = [];
 
-// 1. Obtener niveles de inventario (Stock)
-async function getInventory() {
-    var invMap = {};
-    try {
-        var res = await fetch(workerUrl + '/v1.0/inventory?limit=250');
-        var data = await res.json();
-        if (data.inventory) {
-            data.inventory.forEach(function(record) {
-                // Sumamos el stock disponible en todas las tiendas registradas
-                invMap[record.variant_id] = (invMap[record.variant_id] || 0) + (record.in_stock || 0);
-            });
+// FUNCION PARA CARGAR DATOS PAGINADOS (Solución al límite de 250)
+async function fetchAll(endpoint, key) {
+    let results = [];
+    let cursor = '';
+    let hasMore = true;
+
+    while (hasMore) {
+        try {
+            const url = `${workerUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}limit=250${cursor ? '&cursor=' + cursor : ''}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data[key]) {
+                results = results.concat(data[key]);
+            }
+            
+            cursor = data.cursor || '';
+            hasMore = !!cursor; // Si hay cursor, sigue el bucle
+        } catch (e) {
+            console.error("Error en paginación:", e);
+            hasMore = false;
         }
-    } catch(e) { console.error("Error cargando inventario:", e); }
-    return invMap;
+    }
+    return results;
 }
 
-// 2. Obtener nombres de categorías
-async function getCategories() {
-    var catMap = {};
-    try {
-        var res = await fetch(workerUrl + '/v1.0/categories?limit=250');
-        var data = await res.json();
-        if (data.categories) {
-            data.categories.forEach(function(c) { catMap[c.id] = c.name; });
-        }
-    } catch(e) { console.error("Error cargando categorías:", e); }
-    return catMap;
-}
-
-// 3. Cargar artículos y cruzar datos
-async function loadItems() {
-    var status = document.getElementById('statusMessage');
-    status.innerHTML = '🔄 Sincronizando stock y productos...';
+async function loadAllData() {
+    const status = document.getElementById('statusMessage');
+    status.innerHTML = '🔄 Cargando todos los artículos (esto puede tardar unos segundos)...';
     
     try {
-        // Ejecutamos carga de stock y categorías primero
-        var [stockData, categoryData] = await Promise.all([getInventory(), getCategories()]);
+        // 1. Cargamos inventario y categorías en paralelo
+        const [invRaw, catRaw] = await Promise.all([
+            fetchAll('/v1.0/inventory', 'inventory'),
+            fetchAll('/v1.0/categories', 'categories')
+        ]);
+
+        // Mapeamos para búsqueda rápida
+        const invMap = {};
+        invRaw.forEach(i => invMap[i.variant_id] = (invMap[i.variant_id] || 0) + (i.in_stock || 0));
+        
+        const catMap = {};
+        catRaw.forEach(c => catMap[c.id] = c.name);
+
+        // 2. Cargamos todos los artículos (soporta más de 250)
+        const itemsRaw = await fetchAll('/v1.0/items', 'items');
         
         items = [];
-        var res = await fetch(workerUrl + '/v1.0/items?limit=250');
-        var data = await res.json();
-        
-        if (data.items) {
-            data.items.forEach(function(item) {
-                item.variants.forEach(function(v) {
-                    v.stores.forEach(function(s) {
-                        if (s.available_for_sale) {
-                            var currentStock = stockData[v.variant_id];
-                            // Si el seguimiento está activo pero no hay registro, es 0. 
-                            // Si no tiene seguimiento, mostramos "-"
-                            var stockDisplay = (currentStock !== undefined) ? currentStock : '-';
-                            
-                            items.push({
-                                name: v.variant_name !== 'Default' ? item.item_name + ' (' + v.variant_name + ')' : item.item_name,
-                                category: categoryData[item.category_id] || 'General',
-                                barcode: v.barcode || v.sku || '',
-                                variantId: v.variant_id,
-                                price: s.price || 0,
-                                stock: stockDisplay
-                            });
-                        }
-                    });
+        itemsRaw.forEach(item => {
+            item.variants.forEach(v => {
+                v.stores.forEach(s => {
+                    if (s.available_for_sale) {
+                        items.push({
+                            name: v.variant_name !== 'Default' ? `${item.item_name} (${v.variant_name})` : item.item_name,
+                            category: catMap[item.category_id] || 'General',
+                            barcode: (v.barcode || v.sku || "").trim(),
+                            variantId: v.variant_id,
+                            price: s.price || 0,
+                            stock: invMap[v.variant_id] !== undefined ? invMap[v.variant_id] : '-'
+                        });
+                    }
                 });
             });
-        }
+        });
+
         renderProducts(items);
-        status.innerHTML = '✅ Conectado: ' + items.length + ' productos actualizados';
-    } catch (e) { 
-        status.innerHTML = '❌ Error de conexión con Loyverse';
-        console.error(e);
+        status.innerHTML = `✅ Sincronizado: ${items.length} productos cargados.`;
+        document.getElementById('barcodeInput').focus(); // Devolver foco al escáner
+    } catch (e) {
+        status.innerHTML = '❌ Error al sincronizar datos.';
     }
 }
 
 function renderProducts(list) {
-    var tb = document.getElementById('productsBody');
+    const tb = document.getElementById('productsBody');
     tb.innerHTML = '';
-    list.forEach(function(i) {
-        var r = document.createElement('tr');
-        var stockStyle = i.stock <= 0 && i.stock !== '-' ? 'color:red; font-weight:bold;' : 'color:green;';
-        
-        r.innerHTML = '<td>' + i.name + '</td>' +
-                      '<td>' + i.category + '</td>' +
-                      '<td><small>' + i.barcode + '</small></td>' +
-                      '<td style="' + stockStyle + '">' + i.stock + '</td>' +
-                      '<td>' + i.price.toFixed(2) + '</td>' +
-                      '<td><button class="btn-add" onclick="addToCartByVId(\'' + i.variantId + '\')">+</button></td>';
+    list.forEach(i => {
+        const r = document.createElement('tr');
+        r.innerHTML = `
+            <td>${i.name}</td>
+            <td>${i.category}</td>
+            <td><small>${i.barcode}</small></td>
+            <td>${i.stock}</td>
+            <td>${i.price.toFixed(2)}</td>
+            <td><button class="btn-add" onclick="addToCartByVId('${i.variantId}')">+</button></td>
+        `;
         tb.appendChild(r);
     });
 }
 
 function addToCartByVId(vId) {
-    var item = items.find(function(x) { return x.variantId === vId; });
+    const item = items.find(x => x.variantId === vId);
     if (!item) return;
     
     document.getElementById('beep').play();
-    var ex = cart.find(function(c) { return c.variantId === vId; });
-    if (ex) {
-        ex.qty++;
-    } else {
-        cart.push({ variantId: item.variantId, name: item.name, price: item.price, qty: 1 });
-    }
+    const ex = cart.find(c => c.variantId === vId);
+    if (ex) ex.qty++; else cart.push({...item, qty: 1});
     updateCart();
 }
 
 function updateCart() {
-    var cb = document.getElementById('cartBody');
+    const cb = document.getElementById('cartBody');
     cb.innerHTML = '';
-    var total = 0;
-    cart.forEach(function(i, idx) {
-        var sub = i.price * i.qty;
-        total += sub;
-        var r = document.createElement('tr');
-        r.innerHTML = '<td>' + i.name + '</td><td>' + i.qty + '</td><td>' + sub.toFixed(2) + '</td><td><button onclick="removeItem(' + idx + ')" style="background:none; color:red; border:none; cursor:pointer;">✕</button></td>';
-        cb.appendChild(r);
+    let total = 0;
+    cart.forEach((i, idx) => {
+        total += (i.price * i.qty);
+        cb.innerHTML += `<tr><td>${i.name}</td><td>${i.qty}</td><td>${(i.price*i.qty).toFixed(2)}</td><td><button onclick="removeItem(${idx})">✕</button></td></tr>`;
     });
     document.getElementById('totalLabel').textContent = total.toFixed(2) + ' BOB';
-    updateChange();
 }
 
 function removeItem(idx) {
@@ -193,86 +184,55 @@ function removeItem(idx) {
     updateCart();
 }
 
-function updateChange() {
-    var pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
-    var total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
-    var msg = document.getElementById('changeMessage');
-    if (pay <= 0) {
-        msg.innerHTML = '';
-    } else {
-        var diff = pay - total;
-        msg.innerHTML = diff < 0 ? 'Falta: ' + Math.abs(diff).toFixed(2) : 'Cambio: ' + diff.toFixed(2);
-        msg.style.color = diff < 0 ? 'red' : 'green';
-    }
+function filterItems() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    renderProducts(items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.toLowerCase().includes(q)));
 }
 
-function filterItems() {
-    var q = document.getElementById('searchInput').value.toLowerCase();
-    var filtered = items.filter(function(i) {
-        return i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.toLowerCase().includes(q);
-    });
-    renderProducts(filtered);
-}
+// LOGICA DE ESCANER CORREGIDA
+document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        const code = this.value.trim();
+        if(!code) return;
+
+        // Buscamos exacto por código de barra o SKU
+        const found = items.find(i => i.barcode === code);
+        
+        if (found) {
+            addToCartByVId(found.variantId);
+            this.value = ''; // Limpiar para el siguiente
+        } else {
+            alert("Producto no encontrado: " + code);
+            this.value = '';
+        }
+        this.focus();
+    }
+});
 
 async function registerSale() {
-    if (cart.length === 0) return alert('Carrito vacío');
-    var total = cart.reduce(function(s, i) { return s + (i.price * i.qty); }, 0);
-    
+    if (!cart.length) return alert('Vacío');
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     try {
-        var res = await fetch(workerUrl + '/v1.0/receipts', {
+        const res = await fetch(workerUrl + '/v1.0/receipts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 receipt_type: 'SALE',
-                line_items: cart.map(function(i) { return { variant_id: i.variantId, quantity: i.qty }; }),
+                line_items: cart.map(i => ({ variant_id: i.variantId, quantity: i.qty })),
                 payments: [{ payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58', amount: total }]
             })
         });
-        
         if (res.ok) {
-            if (confirm('✅ Venta registrada correctamente. ¿Imprimir ticket?')) {
-                printTicket(total);
-            }
-            cart = [];
-            document.getElementById('paymentAmount').value = '';
-            updateCart();
-            loadItems(); // Recarga para ver el nuevo stock
-        } else {
-            alert('Error en Loyverse. Revisa el tipo de pago.');
+            alert('Venta exitosa');
+            cart = []; updateCart(); loadAllData();
         }
-    } catch (e) { alert('Error de red'); }
+    } catch (e) { alert('Error'); }
 }
 
-function printTicket(total) {
-    var win = window.open('', '', 'width=300');
-    var h = '<html><body style="font-family:monospace;padding:10px; font-size:12px;">';
-    h += '<h3 style="text-align:center">COMPROBANTE</h3><hr>';
-    cart.forEach(function(i) {
-        h += '<p>' + i.name + '<br>' + i.qty + ' x ' + i.price.toFixed(2) + ' = ' + (i.qty*i.price).toFixed(2) + '</p>';
-    });
-    h += '<hr><h3 style="text-align:right">TOTAL: ' + total.toFixed(2) + ' BOB</h3>';
-    h += '<p style="text-align:center">¡Gracias!</p>';
-    h += '<script>window.onload=function(){window.print();window.close();}<\/script></body></html>';
-    win.document.write(h);
-    win.document.close();
-}
+function clearCart() { cart = []; updateCart(); }
 
-function clearCart() {
-    cart = [];
-    updateCart();
-}
-
-// Escáner
-document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        var code = e.target.value.trim();
-        var found = items.find(function(i) { return i.barcode === code; });
-        if (found) addToCartByVId(found.variantId);
-        e.target.value = '';
-    }
-});
-
-loadItems();
+// Cargar al iniciar
+loadAllData();
 </script>
 </body>
 </html>
