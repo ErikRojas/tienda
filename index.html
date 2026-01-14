@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Loyverse Pro</title>
     <style>
+        .stock-low {color: #c62828;font-weight: bold;}
+        .stock-medium {color: #ef6c00;font-weight: bold;}
         body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; margin:0; }
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
@@ -151,7 +153,14 @@ function renderProducts(list) {
             <td>${i.name}</td>
             <td>${i.category}</td>
             <td><small>${i.barcode}</small></td>
-            <td><b>${i.stock}</b></td>
+           
+            <td class="${
+            i.stock !== '-' && i.stock <= 5 ? 'stock-low' :
+            i.stock !== '-' && i.stock <= 10 ? 'stock-medium' : ''
+            }">
+            <b>${i.stock}</b>
+            </td>
+
             <td>${i.price.toFixed(2)}</td>
             <td><button class="btn-add" onclick="addToCartByVId('${i.variantId}')">+</button></td>
         `;
