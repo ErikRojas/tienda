@@ -10,7 +10,20 @@ body { font-family: Arial, sans-serif; background:#f9f9f9; padding:20px; }
 h1 { text-align:center; }
 .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
 .products { flex:3; }
-.cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+.cart {
+    flex:1;
+    background:#fff;
+    padding:20px;
+    border-radius:8px;
+    box-shadow:0 2px 10px rgba(0,0,0,.1);
+
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
 input, button { width:100%; padding:10px; margin:6px 0; font-size:16px; }
 button { background:#4CAF50; color:#fff; border:none; cursor:pointer; }
 button:hover { background:#45a049; }
@@ -20,7 +33,17 @@ th { background:#f2f2f2; }
 .total { font-size:1.4em; font-weight:bold; color:#d32f2f; text-align:right; }
 .error { color:red; font-weight:bold; }
 .success { color:green; font-weight:bold; }
-@media(max-width:900px){ .container{flex-direction:column;} }
+@media(max-width:900px){
+    .container {
+        flex-direction: column;
+    }
+    .cart {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+}
+    
 </style>
 </head>
 
