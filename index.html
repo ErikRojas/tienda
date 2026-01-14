@@ -3,65 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>POS Simple Loyverse</title>
+<title>POS Loyverse</title>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f9f9f9; padding:20px; }
 h1 { text-align:center; }
 .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
+
 .products { flex:3; }
 .cart {
-    flex:1;
-    background:#fff;
-    padding:20px;
-    border-radius:8px;
+    flex:1; background:#fff; padding:20px; border-radius:8px;
     box-shadow:0 2px 10px rgba(0,0,0,.1);
-
-    position: sticky;
-    top: 20px;
-    align-self: flex-start;
-    max-height: calc(100vh - 40px);
-    overflow-y: auto;
+    position:sticky; top:20px; align-self:flex-start;
+    max-height:calc(100vh - 40px); overflow-y:auto;
 }
 
 input, button { width:100%; padding:10px; margin:6px 0; font-size:16px; }
 button { background:#4CAF50; color:#fff; border:none; cursor:pointer; }
 button:hover { background:#45a049; }
+
 table { width:100%; border-collapse:collapse; background:#fff; margin-top:10px; }
 th, td { border:1px solid #ddd; padding:8px; }
 th { background:#f2f2f2; }
+
 .total { font-size:1.4em; font-weight:bold; color:#d32f2f; text-align:right; }
 .error { color:red; font-weight:bold; }
 .success { color:green; font-weight:bold; }
+
 @media(max-width:900px){
-    .container {
-        flex-direction: column;
-    }
-    .cart {
-        position: static;
-        max-height: none;
-        overflow: visible;
-    }
+  .container{flex-direction:column;}
+  .cart{position:static; max-height:none;}
 }
-    
 </style>
 </head>
 
 <body>
 
-<h1>POS Simple Loyverse</h1>
+<h1>POS Loyverse</h1>
 
-<div id="statusMessage" style="text-align:center; min-height:25px;"></div>
+<div id="statusMessage" style="text-align:center"></div>
 
 <div class="container">
 
 <div class="products">
 <h2>Productos</h2>
-<input type="text" placeholder="Buscar..." oninput="filterItems()" id="searchInput">
+<input id="barcodeInput" placeholder="Escanear código..." autofocus>
+<input id="searchInput" placeholder="Buscar..." oninput="filterItems()">
+
 <table>
-<thead>
-<tr><th>Nombre</th><th>SKU</th><th>Precio</th><th></th></tr>
-</thead>
+<thead><tr><th>Nombre</th><th>Stock</th><th>Precio</th><th></th></tr></thead>
 <tbody id="productsBody"></tbody>
 </table>
 </div>
@@ -70,172 +60,180 @@ th { background:#f2f2f2; }
 <h2>Carrito</h2>
 
 <table>
-<thead>
-<tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Sub</th><th></th></tr>
-</thead>
+<thead><tr><th>Producto</th><th>Cant</th><th>Sub</th><th></th></tr></thead>
 <tbody id="cartBody"></tbody>
 </table>
 
 <div class="total" id="totalLabel">Total: 0.00 BOB</div>
 
 <label>Monto Pagado</label>
-<input type="number" id="paymentAmount" step="0.01" min="0" oninput="updateChange()">
+<input type="number" id="paymentAmount" step="0.01" oninput="updateChange()">
 
 <button onclick="registerSale()">Registrar Venta</button>
 
 <p id="changeMessage"></p>
 
 <button style="background:#f44336" onclick="clearCart()">Limpiar</button>
+</div>
+</div>
 
-</div>
-</div>
+<audio id="beep">
+  <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg">
+</audio>
 
 <script>
 const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 
-let sellableVariants = [];
+let items = [];
 let cart = [];
 
-/* ====================== */
-function getCartTotal() {
-    return cart.reduce((s,i)=>s+i.price*i.quantity,0);
-}
+/* ===================== */
+function getTotal(){ return cart.reduce((s,i)=>s+i.price*i.qty,0); }
 
-/* ====================== */
-async function loadItems() {
-    const status = document.getElementById('statusMessage');
-    status.textContent = 'Cargando productos...';
+/* ===================== */
+async function loadItems(){
+  const res = await fetch(workerUrl+'/v1.0/items?limit=250');
+  const data = await res.json();
 
-    sellableVariants = [];
-    let url = '/v1.0/items?limit=250';
-
-    try {
-        while(url){
-            const res = await fetch(workerUrl + url);
-            const data = await res.json();
-            (data.items||[]).forEach(item=>{
-                item.variants.forEach(v=>{
-                    v.stores.forEach(s=>{
-                        if(s.available_for_sale){
-                            sellableVariants.push({
-                                name:item.item_name,
-                                sku:v.sku||'',
-                                barcode:v.barcode||'',
-                                variantId:v.variant_id,
-                                price:s.price
-                            });
-                        }
-                    });
-                });
-            });
-            url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
+  items = [];
+  data.items.forEach(it=>{
+    it.variants.forEach(v=>{
+      v.stores.forEach(s=>{
+        if(s.available_for_sale){
+          items.push({
+            name: it.item_name,
+            barcode: v.barcode || '',
+            variantId: v.variant_id,
+            price: s.price,
+            stock: s.stock_level ?? 9999
+          });
         }
-        displayItems(sellableVariants);
-        status.innerHTML = `<span class="success">Productos cargados</span>`;
-    } catch(e){
-        status.innerHTML = `<span class="error">${e.message}</span>`;
-    }
-}
-
-function displayItems(items){
-    const tb=document.getElementById('productsBody');
-    tb.innerHTML='';
-    items.forEach(i=>{
-        const r=document.createElement('tr');
-        r.innerHTML=`
-        <td>${i.name}</td>
-        <td>${i.sku||'-'}</td>
-        <td>${i.price.toFixed(2)}</td>
-        <td><button>Agregar</button></td>`;
-        r.querySelector('button').onclick=()=>addToCart(i);
-        tb.appendChild(r);
+      });
     });
+  });
+  renderProducts(items);
+}
+loadItems();
+
+/* ===================== */
+function renderProducts(list){
+  const tb = productsBody;
+  tb.innerHTML='';
+  list.forEach(i=>{
+    const r=document.createElement('tr');
+    r.innerHTML=`
+      <td>${i.name}</td>
+      <td>${i.stock}</td>
+      <td>${i.price.toFixed(2)}</td>
+      <td><button ${i.stock<=0?'disabled':''}>+</button></td>`;
+    r.querySelector('button').onclick=()=>addToCart(i);
+    tb.appendChild(r);
+  });
 }
 
 function filterItems(){
-    const s=document.getElementById('searchInput').value.toLowerCase();
-    displayItems(sellableVariants.filter(v =>
-        v.name.toLowerCase().includes(s) ||
-        v.sku.toLowerCase().includes(s) ||
-        v.barcode.toLowerCase().includes(s)
-    ));
+  const s=searchInput.value.toLowerCase();
+  renderProducts(items.filter(i=>i.name.toLowerCase().includes(s)));
 }
 
-/* ====================== */
+/* ===================== */
 function addToCart(item){
-    const e=cart.find(i=>i.variantId===item.variantId);
-    e?e.quantity++:cart.push({...item,quantity:1});
-    updateCart();
+  if(item.stock<=0){ alert('Sin stock'); return; }
+
+  document.getElementById('beep').play();
+
+  const e=cart.find(i=>i.variantId===item.variantId);
+  e?e.qty++:cart.push({...item,qty:1});
+  item.stock--;
+  updateCart();
+  renderProducts(items);
 }
 
 function updateCart(){
-    const tb=document.getElementById('cartBody');
-    tb.innerHTML='';
-    cart.forEach((i,idx)=>{
-        const r=document.createElement('tr');
-        r.innerHTML=`
-        <td>${i.name}</td>
-        <td><input type="number" min="1" value="${i.quantity}" onchange="updateQty(${idx},this.value)" style="width:60px"></td>
-        <td>${i.price.toFixed(2)}</td>
-        <td>${(i.price*i.quantity).toFixed(2)}</td>
-        <td><button onclick="removeItem(${idx})" style="background:#f44336">X</button></td>`;
-        tb.appendChild(r);
-    });
-    document.getElementById('totalLabel').textContent=`Total: ${getCartTotal().toFixed(2)} BOB`;
-    updateChange();
+  cartBody.innerHTML='';
+  cart.forEach((i,idx)=>{
+    const r=document.createElement('tr');
+    r.innerHTML=`
+      <td>${i.name}</td>
+      <td>${(i.price*i.qty).toFixed(2)}</td>
+      <td><button onclick="removeItem(${idx})">X</button></td>`;
+    cartBody.appendChild(r);
+  });
+  totalLabel.textContent=`Total: ${getTotal().toFixed(2)} BOB`;
+  updateChange();
 }
 
-function updateQty(i,v){ cart[i].quantity=Math.max(1,parseInt(v)||1); updateCart(); }
-function removeItem(i){ cart.splice(i,1); updateCart(); }
+function removeItem(i){
+  items.find(x=>x.variantId===cart[i].variantId).stock+=cart[i].qty;
+  cart.splice(i,1);
+  updateCart(); renderProducts(items);
+}
 
 function clearCart(){
-    cart=[];
-    updateCart();
-    document.getElementById('paymentAmount').value='';
-    document.getElementById('changeMessage').textContent='';
+  cart.forEach(i=>{
+    items.find(x=>x.variantId===i.variantId).stock+=i.qty;
+  });
+  cart=[];
+  updateCart();
+  paymentAmount.value='';
+  changeMessage.textContent='';
 }
 
-/* ====================== */
+/* ===================== */
 function updateChange(){
-    const pay=parseFloat(paymentAmount.value);
-    const total=getCartTotal();
-    if(!pay){ changeMessage.textContent=''; return; }
-    if(pay<total){
-        changeMessage.innerHTML=`<span class="error">Faltan ${(total-pay).toFixed(2)} BOB</span>`;
-    }else{
-        changeMessage.innerHTML=`<span class="success">Cambio ${(pay-total).toFixed(2)} BOB</span>`;
-    }
+  const pay=parseFloat(paymentAmount.value)||0;
+  const total=getTotal();
+  if(!pay){ changeMessage.textContent=''; return; }
+  changeMessage.innerHTML =
+    pay<total
+      ? `<span class="error">Faltan ${(total-pay).toFixed(2)}</span>`
+      : `<span class="success">Cambio ${(pay-total).toFixed(2)}</span>`;
 }
 
-/* ====================== */
+/* ===================== */
+barcodeInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const code=barcodeInput.value.trim();
+    const item=items.find(i=>i.barcode===code);
+    if(item) addToCart(item);
+    barcodeInput.value='';
+  }
+});
+
+/* ===================== */
 async function registerSale(){
-    const total=getCartTotal();
-    const pay=parseFloat(paymentAmount.value)||0;
-    if(!cart.length) return alert('Carrito vacío');
-    if(pay<total) return alert('Pago insuficiente');
+  if(!cart.length) return alert('Carrito vacío');
 
-    await fetch(workerUrl+'/v1.0/receipts',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-            receipt_type:'SALE',
-            line_items:cart.map(i=>({
-                variant_id:i.variantId,
-                quantity:i.quantity,
-                price:i.price
-            })),
-            payments:[{
-                amount:pay,
-                payment_type_id:'080f1ca3-0aea-410b-9d27-801e6c7a6c58'
-            }]
-        })
-    });
+  await fetch(workerUrl+'/v1.0/receipts',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      receipt_type:'SALE',
+      line_items:cart.map(i=>({
+        variant_id:i.variantId,
+        quantity:i.qty,
+        price:i.price
+      })),
+      payments:[{amount:getTotal(),payment_type_id:'080f1ca3-0aea-410b-9d27-801e6c7a6c58'}]
+    })
+  });
 
-    clearCart();
-    alert('Venta registrada');
+  printTicket();
+  clearCart();
 }
 
-loadItems();
+/* ===================== */
+function printTicket(){
+  const win=window.open('','','width=300');
+  win.document.write(`<h3>TICKET</h3>`);
+  cart.forEach(i=>{
+    win.document.write(`${i.qty} x ${i.name} ${i.price.toFixed(2)}<br>`);
+  });
+  win.document.write(`<b>Total: ${getTotal().toFixed(2)}</b>`);
+  win.print();
+  win.close();
+}
 </script>
+
 </body>
 </html>
