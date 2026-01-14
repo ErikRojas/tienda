@@ -9,7 +9,8 @@
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; height: fit-content; }
-        input { width:100%; padding:12px; margin:8px 0; border:2px solid #3498db; border-radius:4px; box-sizing: border-box; font-size: 16px; }
+        input { width:100%; padding:12px; margin:8px 0; border:2px solid #ddd; border-radius:4px; box-sizing: border-box; font-size: 16px; }
+        input:focus { border-color: #3498db; outline: none; }
         button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; font-weight: bold; }
         .btn-add { background:#4CAF50; color:#fff; }
         table { width:100%; border-collapse:collapse; }
@@ -17,7 +18,10 @@
         th { background:#f8f9fa; font-size: 11px; color: #888; text-transform: uppercase; }
         .total { font-size:1.8em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
         .status-bar { background: #2c3e50; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 4px; font-weight: bold; }
-        #barcodeInput { background: #e8f4fd; } /* Color especial para el escáner */
+        #barcodeInput { background: #e8f4fd; border-color: #3498db; }
+        .change-box { padding: 10px; border-radius: 4px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+        .insufficient { background: #ffebee; color: #c62828; }
+        .sufficient { background: #e8f5e9; color: #2e7d32; }
     </style>
 </head>
 <body>
@@ -31,8 +35,8 @@
             <button onclick="loadAllData()" style="width:auto; font-size:12px; padding:5px 15px; background:#3498db; color:white;">🔄 Sincronizar Todo</button>
         </div>
         
-        <input id="barcodeInput" placeholder="SISTEMA LISTO: Escanee ahora mismo..." autofocus>
-        <input id="searchInput" placeholder="O busque manualmente por nombre..." oninput="filterItems()">
+        <input id="barcodeInput" placeholder="MODO ESCÁNER: Listo para leer..." autofocus>
+        <input id="searchInput" placeholder="Buscador manual (nombre, categoría, código)..." oninput="filterItems()">
         
         <table>
             <thead>
@@ -55,9 +59,17 @@
             <thead><tr><th>Item</th><th>Cant</th><th>Sub</th><th></th></tr></thead>
             <tbody id="cartBody"></tbody>
         </table>
+        
         <div class="total" id="totalLabel">0.00 BOB</div>
+
+        <div id="paymentSection">
+            <label><b>Monto Recibido:</b></label>
+            <input type="number" id="paymentAmount" step="0.10" placeholder="0.00" oninput="calculateChange()">
+            <div id="changeDisplay" class="change-box" style="display:none;"></div>
+        </div>
+
         <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
-        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">VACIAR</button>
+        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 11px;">VACIAR CARRITO</button>
     </div>
 </div>
 
@@ -68,26 +80,21 @@ const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 let items = [];
 let cart = [];
 
-// FUNCION PARA CARGAR DATOS PAGINADOS (Solución al límite de 250)
+// PAGINACIÓN AUTOMÁTICA
 async function fetchAll(endpoint, key) {
     let results = [];
     let cursor = '';
     let hasMore = true;
-
     while (hasMore) {
         try {
             const url = `${workerUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}limit=250${cursor ? '&cursor=' + cursor : ''}`;
             const res = await fetch(url);
             const data = await res.json();
-            
-            if (data[key]) {
-                results = results.concat(data[key]);
-            }
-            
+            if (data[key]) results = results.concat(data[key]);
             cursor = data.cursor || '';
-            hasMore = !!cursor; // Si hay cursor, sigue el bucle
+            hasMore = !!cursor;
         } catch (e) {
-            console.error("Error en paginación:", e);
+            console.error("Error paginando:", e);
             hasMore = false;
         }
     }
@@ -96,25 +103,19 @@ async function fetchAll(endpoint, key) {
 
 async function loadAllData() {
     const status = document.getElementById('statusMessage');
-    status.innerHTML = '🔄 Cargando todos los artículos (esto puede tardar unos segundos)...';
-    
+    status.innerHTML = '🔄 Cargando artículos y stock...';
     try {
-        // 1. Cargamos inventario y categorías en paralelo
-        const [invRaw, catRaw] = await Promise.all([
+        const [invRaw, catRaw, itemsRaw] = await Promise.all([
             fetchAll('/v1.0/inventory', 'inventory'),
-            fetchAll('/v1.0/categories', 'categories')
+            fetchAll('/v1.0/categories', 'categories'),
+            fetchAll('/v1.0/items', 'items')
         ]);
 
-        // Mapeamos para búsqueda rápida
         const invMap = {};
         invRaw.forEach(i => invMap[i.variant_id] = (invMap[i.variant_id] || 0) + (i.in_stock || 0));
-        
         const catMap = {};
         catRaw.forEach(c => catMap[c.id] = c.name);
 
-        // 2. Cargamos todos los artículos (soporta más de 250)
-        const itemsRaw = await fetchAll('/v1.0/items', 'items');
-        
         items = [];
         itemsRaw.forEach(item => {
             item.variants.forEach(v => {
@@ -134,10 +135,10 @@ async function loadAllData() {
         });
 
         renderProducts(items);
-        status.innerHTML = `✅ Sincronizado: ${items.length} productos cargados.`;
-        document.getElementById('barcodeInput').focus(); // Devolver foco al escáner
+        status.innerHTML = `✅ ${items.length} productos sincronizados.`;
+        document.getElementById('barcodeInput').focus();
     } catch (e) {
-        status.innerHTML = '❌ Error al sincronizar datos.';
+        status.innerHTML = '❌ Error de conexión.';
     }
 }
 
@@ -150,7 +151,7 @@ function renderProducts(list) {
             <td>${i.name}</td>
             <td>${i.category}</td>
             <td><small>${i.barcode}</small></td>
-            <td>${i.stock}</td>
+            <td><b>${i.stock}</b></td>
             <td>${i.price.toFixed(2)}</td>
             <td><button class="btn-add" onclick="addToCartByVId('${i.variantId}')">+</button></td>
         `;
@@ -161,7 +162,6 @@ function renderProducts(list) {
 function addToCartByVId(vId) {
     const item = items.find(x => x.variantId === vId);
     if (!item) return;
-    
     document.getElementById('beep').play();
     const ex = cart.find(c => c.variantId === vId);
     if (ex) ex.qty++; else cart.push({...item, qty: 1});
@@ -173,10 +173,12 @@ function updateCart() {
     cb.innerHTML = '';
     let total = 0;
     cart.forEach((i, idx) => {
-        total += (i.price * i.qty);
-        cb.innerHTML += `<tr><td>${i.name}</td><td>${i.qty}</td><td>${(i.price*i.qty).toFixed(2)}</td><td><button onclick="removeItem(${idx})">✕</button></td></tr>`;
+        const sub = i.price * i.qty;
+        total += sub;
+        cb.innerHTML += `<tr><td>${i.name}</td><td>${i.qty}</td><td>${sub.toFixed(2)}</td><td><button onclick="removeItem(${idx})" style="background:none;color:red;font-weight:bold;">✕</button></td></tr>`;
     });
     document.getElementById('totalLabel').textContent = total.toFixed(2) + ' BOB';
+    calculateChange();
 }
 
 function removeItem(idx) {
@@ -184,34 +186,65 @@ function removeItem(idx) {
     updateCart();
 }
 
-function filterItems() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    renderProducts(items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.toLowerCase().includes(q)));
+function calculateChange() {
+    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
+    const display = document.getElementById('changeDisplay');
+    
+    if (pay <= 0) {
+        display.style.display = 'none';
+        return;
+    }
+    
+    display.style.display = 'block';
+    const diff = pay - total;
+    if (diff < 0) {
+        display.className = 'change-box insufficient';
+        display.textContent = 'Falta: ' + Math.abs(diff).toFixed(2) + ' BOB';
+    } else {
+        display.className = 'change-box sufficient';
+        display.textContent = 'Cambio: ' + diff.toFixed(2) + ' BOB';
+    }
 }
 
-// LOGICA DE ESCANER CORREGIDA
+function filterItems() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    renderProducts(items.filter(i => 
+        i.name.toLowerCase().includes(q) || 
+        i.category.toLowerCase().includes(q) || 
+        i.barcode.toLowerCase().includes(q)
+    ));
+}
+
+// ESCÁNER
 document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         const code = this.value.trim();
         if(!code) return;
-
-        // Buscamos exacto por código de barra o SKU
         const found = items.find(i => i.barcode === code);
-        
         if (found) {
             addToCartByVId(found.variantId);
-            this.value = ''; // Limpiar para el siguiente
+            this.value = '';
         } else {
-            alert("Producto no encontrado: " + code);
+            alert("No encontrado: " + code);
             this.value = '';
         }
         this.focus();
     }
 });
 
+// VENTA E IMPRESIÓN
 async function registerSale() {
-    if (!cart.length) return alert('Vacío');
+    if (!cart.length) return alert('Carrito vacío');
     const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const pay = parseFloat(document.getElementById('paymentAmount').value) || 0;
+
+    if (pay < total && pay > 0) {
+        if(!confirm('El monto recibido es menor al total. ¿Continuar?')) return;
+    }
+
+    document.getElementById('statusMessage').innerHTML = '⏳ Registrando en Loyverse...';
+
     try {
         const res = await fetch(workerUrl + '/v1.0/receipts', {
             method: 'POST',
@@ -222,16 +255,44 @@ async function registerSale() {
                 payments: [{ payment_type_id: '080f1ca3-0aea-410b-9d27-801e6c7a6c58', amount: total }]
             })
         });
+
         if (res.ok) {
-            alert('Venta exitosa');
-            cart = []; updateCart(); loadAllData();
+            const finalCart = [...cart]; // Copia para el ticket
+            const finalTotal = total;
+            
+            if (confirm('✅ Venta registrada con éxito. ¿Desea imprimir el ticket?')) {
+                printTicket(finalCart, finalTotal);
+            }
+            
+            cart = [];
+            document.getElementById('paymentAmount').value = '';
+            updateCart();
+            loadAllData();
+        } else {
+            alert('Error al registrar la venta.');
         }
-    } catch (e) { alert('Error'); }
+    } catch (e) { alert('Error de red.'); }
 }
 
-function clearCart() { cart = []; updateCart(); }
+function printTicket(data, total) {
+    const win = window.open('', '', 'width=300');
+    const fecha = new Date().toLocaleString();
+    let h = '<html><body style="font-family:monospace;padding:10px;font-size:12px;">';
+    h += '<div style="text-align:center;"><h3>RECIBO DE VENTA</h3><p>'+fecha+'</p></div><hr>';
+    data.forEach(i => {
+        h += '<p>' + i.name + '<br>' + i.qty + ' x ' + i.price.toFixed(2) + ' = ' + (i.qty*i.price).toFixed(2) + '</p>';
+    });
+    h += '<hr><h3 style="text-align:right">TOTAL: ' + total.toFixed(2) + ' BOB</h3>';
+    h += '<p style="text-align:center;margin-top:20px;">¡Gracias por su compra!</p>';
+    h += '<script>window.onload=function(){window.print();window.close();}<\/script></body></html>';
+    win.document.write(h);
+    win.document.close();
+}
 
-// Cargar al iniciar
+function clearCart() {
+    if(confirm('¿Vaciar el carrito?')) { cart = []; updateCart(); }
+}
+
 loadAllData();
 </script>
 </body>
