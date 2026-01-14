@@ -24,17 +24,17 @@
 </head>
 <body>
 
-<div id="statusMessage" class="status-bar">Iniciando sistema...</div>
+<div id="statusMessage" class="status-bar">Cargando sistema...</div>
 
 <div class="container">
     <div class="products">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2>Inventario Disponible</h2>
-            <button onclick="loadItems()" style="width: auto; background: #3498db; color: white; padding: 5px 15px;">🔄 Sincronizar Stock</button>
+            <h2>Inventario Loyverse</h2>
+            <button onclick="loadItems()" style="width: auto; background: #3498db; color: white; padding: 5px 15px;">🔄 Sincronizar</button>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input id="barcodeInput" placeholder="Escaneé código de barras..." autofocus>
-            <input id="searchInput" placeholder="Filtrar por nombre o categoría..." oninput="filterItems()">
+            <input id="barcodeInput" placeholder="Escaneo de código...">
+            <input id="searchInput" placeholder="Buscar producto o categoría..." oninput="filterItems()">
         </div>
 
         <table>
@@ -45,7 +45,7 @@
                     <th>Código</th>
                     <th>Stock</th>
                     <th>Precio</th>
-                    <th>Acción</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody id="productsBody"></tbody>
@@ -67,7 +67,7 @@
         <input type="number" id="paymentAmount" step="0.5" placeholder="0.00" oninput="updateChange()">
         <div id="changeMessage" style="margin-bottom: 10px; font-weight: bold;"></div>
 
-        <button onclick="registerSale()" style="background: #27ae60; color: white;">REGISTRAR VENTA</button>
+        <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
         <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">Vaciar Todo</button>
     </div>
 </div>
@@ -75,11 +75,12 @@
 <audio id="beep"><source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
+/* CONFIGURACIÓN */
 const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 let items = [];
 let cart = [];
 
-/* --- CARGA DE DATOS --- */
+/* CARGA DE DATOS */
 async function loadInventory() {
     let inventory = {};
     let url = '/v1.0/inventory?limit=250';
@@ -116,7 +117,7 @@ async function loadCategories() {
 
 async function loadItems() {
     const status = document.getElementById('statusMessage');
-    status.innerHTML = '⏳ Conectando con Loyverse...';
+    status.innerHTML = '⏳ Sincronizando datos...';
     try {
         const [inventory, categories] = await Promise.all([loadInventory(), loadCategories()]);
         items = [];
@@ -145,13 +146,13 @@ async function loadItems() {
             url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
         }
         renderProducts(items);
-        status.innerHTML = `✅ <span class="success">${items.length} Productos cargados con stock</span>`;
+        status.innerHTML = `✅ <span class="success">${items.length} Productos con stock real</span>`;
     } catch (e) {
         status.innerHTML = `<span class="error">❌ Error de conexión</span>`;
     }
 }
 
-/* --- LÓGICA DE TIENDA --- */
+/* RENDERIZADO */
 function renderProducts(list) {
     const tb = document.getElementById('productsBody');
     tb.innerHTML = '';
@@ -164,7 +165,7 @@ function renderProducts(list) {
             <td><small>${i.barcode || '-'}</small></td>
             <td style="color:${out?'red':'green'}"><b>${i.stock}</b></td>
             <td>${i.price.toFixed(2)}</td>
-            <td><button class="btn-add" ${out?'disabled':''} onclick="addToCartByVId('${i.variantId}')">${out?'Agotado':'+'}</button></td>
+            <td><button class="btn-add" ${out?'disabled':''} onclick="addToCartByVId('${i.variantId}')">${out?'S/S':'+'}</button></td>
         `;
         tb.appendChild(r);
     });
@@ -217,11 +218,10 @@ function filterItems() {
     renderProducts(items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || i.barcode.includes(q)));
 }
 
-/* --- VENTA E IMPRESIÓN --- */
+/* VENTA E IMPRESIÓN */
 async function registerSale() {
     if (!cart.length) return alert('Carrito vacío');
     const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
-    
     document.getElementById('statusMessage').innerHTML = '⏳ Registrando venta...';
 
     try {
@@ -236,22 +236,19 @@ async function registerSale() {
         });
 
         if (res.ok) {
-            // Guardamos el carrito temporal para el ticket antes de borrarlo
             const tempCart = [...cart];
             const tempTotal = total;
-            
-            if (confirm('✅ Venta registrada. ¿Desea imprimir el comprobante?')) {
+            if (confirm('✅ Venta exitosa. ¿Imprimir ticket?')) {
                 printTicket(tempCart, tempTotal);
             }
-            
             cart = [];
             updateCart();
             document.getElementById('paymentAmount').value = '';
-            loadItems(); // Recarga stock real tras la venta
+            loadItems(); 
         } else {
-            alert('Error al registrar la venta. Verifique conexión.');
+            alert('Error al registrar venta.');
         }
-    } catch (e) { alert('Error crítico de red.'); }
+    } catch (e) { alert('Error de red.'); }
 }
 
 function printTicket(ticketData, total) {
@@ -260,19 +257,18 @@ function printTicket(ticketData, total) {
     win.document.write(`
         <html><body style="font-family:monospace; padding:10px; font-size:12px;">
             <div style="text-align:center;">
-                <h2 style="margin:0;">MI NEGOCIO</h2>
+                <h2 style="margin:0;">COMPROBANTE</h2>
                 <p>${fecha}</p>
                 <hr>
             </div>
-            <table style="width:100%; border-collapse:collapse;">
+            <table style="width:100%;">
                 ${ticketData.map(i => `
                     <tr><td colspan="2">${i.name}</td></tr>
                     <tr><td>${i.qty} x ${i.price.toFixed(2)}</td><td style="text-align:right;">${(i.qty*i.price).toFixed(2)}</td></tr>
                 `).join('')}
             </table>
             <hr>
-            <div style="text-align:right; font-size:14px;"><b>TOTAL: ${total.toFixed(2)} BOB</b></div>
-            <p style="text-align:center; margin-top:20px;">¡Gracias por preferirnos!</p>
+            <div style="text-align:right;"><b>TOTAL: ${total.toFixed(2)} BOB</b></div>
             <script>window.onload = function() { window.print(); window.close(); }</script>
         </body></html>
     `);
@@ -288,7 +284,7 @@ document.getElementById('barcodeInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         const i = items.find(x => x.barcode === e.target.value.trim());
         if (i) addToCartByVId(i.variantId);
-        else alert("Producto no encontrado");
+        else alert("No encontrado");
         e.target.value = '';
     }
 });
