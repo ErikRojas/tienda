@@ -51,16 +51,7 @@ th { background:#f2f2f2; }
 <input id="searchInput" placeholder="Buscar..." oninput="filterItems()">
 
 <table>
-<thead>
-<tr>
-    <th>Nombre</th>
-    <th>Categoría</th>
-    <th>Barcode</th>
-    <th>Stock</th>
-    <th>Precio</th>
-    <th></th>
-</tr>
-</thead>
+<thead><tr><th>Nombre</th><th>Categoría</th><th>Barcode</th><th>Stock</th><th>Precio</th><th></th></tr></thead>
 
 <tbody id="productsBody"></tbody>
 </table>
@@ -121,7 +112,7 @@ async function loadInventory() {
 }
     
 /* ===================== */
-    
+
 async function loadItems() {
     const status = document.getElementById('statusMessage');
     status.textContent = 'Cargando productos...';
@@ -160,8 +151,6 @@ async function loadItems() {
     renderProducts(items);
     status.innerHTML = `<span class="success">Productos cargados</span>`;
 }
-
-
 /* ===================== */
 function renderProducts(list){
     const tb = productsBody;
@@ -183,8 +172,6 @@ function renderProducts(list){
         tb.appendChild(r);
     });
 }
-
-
 /* ===================== */
 function addToCart(item){
   if(item.stock<=0){ alert('Sin stock'); return; }
