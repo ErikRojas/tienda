@@ -1,393 +1,218 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS Simple con Loyverse - Erik</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POS Simple Loyverse</title>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: #f9f9f9;
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .container {
-            display: flex;
-            gap: 25px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .products-section {
-            flex: 3;
-        }
-
-        .cart-section {
-            flex: 1;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            position: sticky;
-            top: 20px;
-            height: fit-content;
-        }
-
-        input, button {
-            padding: 10px;
-            margin: 8px 0;
-            font-size: 16px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background: #45a049;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 15px 0;
-            background: white;
-        }
-
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: left;
-        }
-
-        th {
-            background-color: #f2f2f2;
-        }
-
-        .cart-total {
-            font-weight: bold;
-            font-size: 1.4em;
-            margin: 15px 0;
-            color: #d32f2f;
-            text-align: right;
-        }
-
-        .error {
-            color: red;
-            font-weight: bold;
-        }
-
-        .success {
-            color: green;
-            font-weight: bold;
-        }
-
-        @media (max-width: 900px) {
-            .container {
-                flex-direction: column;
-            }
-            .cart-section {
-                position: static;
-            }
-        }
-    </style>
+<style>
+body { font-family: Arial, sans-serif; background:#f9f9f9; padding:20px; }
+h1 { text-align:center; }
+.container { display:flex; gap:20px; max-width:1400px; margin:auto; }
+.products { flex:3; }
+.cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+input, button { width:100%; padding:10px; margin:6px 0; font-size:16px; }
+button { background:#4CAF50; color:#fff; border:none; cursor:pointer; }
+button:hover { background:#45a049; }
+table { width:100%; border-collapse:collapse; background:#fff; margin-top:10px; }
+th, td { border:1px solid #ddd; padding:8px; }
+th { background:#f2f2f2; }
+.total { font-size:1.4em; font-weight:bold; color:#d32f2f; text-align:right; }
+.error { color:red; font-weight:bold; }
+.success { color:green; font-weight:bold; }
+@media(max-width:900px){ .container{flex-direction:column;} }
+</style>
 </head>
 
 <body>
 
-<h1>POS Simple con Loyverse ChatGTP</h1>
+<h1>POS Simple Loyverse</h1>
 
-<div style="max-width:600px; margin:0 auto 20px;">
-    <label>Store ID:</label>
-    <input type="text" id="storeId" placeholder="Ej: 78731809-f60c-4b28-9910-edfb8df5186c">
-    <button onclick="loadItems()">Cargar Productos</button>
-</div>
-
-<div id="statusMessage" style="text-align:center; min-height:30px;"></div>
+<div id="statusMessage" style="text-align:center; min-height:25px;"></div>
 
 <div class="container">
 
-    <!-- PRODUCTOS -->
-    <div class="products-section">
-        <h2>Productos</h2>
-        <input
-            type="text"
-            id="searchInput"
-            placeholder="Buscar por nombre, SKU o barcode..."
-            oninput="filterItems()">
+<div class="products">
+<h2>Productos</h2>
+<input type="text" placeholder="Buscar..." oninput="filterItems()" id="searchInput">
+<table>
+<thead>
+<tr><th>Nombre</th><th>SKU</th><th>Precio</th><th></th></tr>
+</thead>
+<tbody id="productsBody"></tbody>
+</table>
+</div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Nombre</th>
-                    <th>SKU</th>
-                    <th>Precio</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="productsBody"></tbody>
-        </table>
-    </div>
+<div class="cart">
+<h2>Carrito</h2>
 
-    <!-- CARRITO -->
-    <div class="cart-section">
-        <h2>Carrito</h2>
+<table>
+<thead>
+<tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Sub</th><th></th></tr>
+</thead>
+<tbody id="cartBody"></tbody>
+</table>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Producto</th>
-                    <th>Cant.</th>
-                    <th>Precio</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="cartBody"></tbody>
-        </table>
+<div class="total" id="totalLabel">Total: 0.00 BOB</div>
 
-        <div class="cart-total" id="totalLabel">Total: 0.00 BOB</div>
+<label>Monto Pagado</label>
+<input type="number" id="paymentAmount" step="0.01" min="0" oninput="updateChange()">
 
-        <label>Monto Pagado:</label>
-        <input
-            type="number"
-            id="paymentAmount"
-            min="0"
-            step="0.01"
-            placeholder="Ej: 100.00"
-            oninput="updateChange()">
+<button onclick="registerSale()">Registrar Venta</button>
 
-        <button onclick="registerSale()">Registrar Venta</button>
+<p id="changeMessage"></p>
 
-        <p id="changeMessage" style="margin-top:15px;"></p>
+<button style="background:#f44336" onclick="clearCart()">Limpiar</button>
 
-        <button onclick="clearCart()" style="background:#f44336; margin-top:10px;">
-            Limpiar Carrito
-        </button>
-    </div>
+</div>
 </div>
 
 <script>
-    const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
+const workerUrl = 'https://TU-WORKER.workers.dev';
 
-    let allItems = [];
-    let sellableVariants = [];
-    let cart = [];
+let sellableVariants = [];
+let cart = [];
 
-    /* ==========================
-       UTILIDADES
-    ========================== */
-    function getCartTotal() {
-        return cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    }
+/* ====================== */
+function getCartTotal() {
+    return cart.reduce((s,i)=>s+i.price*i.quantity,0);
+}
 
-    /* ==========================
-       CARGA DE PRODUCTOS
-    ========================== */
-    async function loadItems() {
-        const storeId = document.getElementById('storeId').value.trim();
-        const status = document.getElementById('statusMessage');
+/* ====================== */
+async function loadItems() {
+    const status = document.getElementById('statusMessage');
+    status.textContent = 'Cargando productos...';
 
-        if (!storeId) {
-            status.innerHTML = '<span class="error">Ingresa el Store ID.</span>';
-            return;
-        }
+    sellableVariants = [];
+    let url = '/v1.0/items?limit=250';
 
-        status.textContent = 'Cargando productos...';
-        allItems = [];
-        sellableVariants = [];
-
-        let urlPath = '/v1.0/items?limit=250';
-
-        while (urlPath) {
-            try {
-                const res = await fetch(workerUrl + urlPath);
-                const data = await res.json();
-
-                allItems = allItems.concat(data.items || []);
-                urlPath = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
-            } catch (err) {
-                status.innerHTML = `<span class="error">Error: ${err.message}</span>`;
-                return;
-            }
-        }
-
-        allItems.forEach(item => {
-            item.variants.forEach(variant => {
-                variant.stores.forEach(store => {
-                    if (store.store_id === storeId && store.available_for_sale) {
-                        sellableVariants.push({
-                            name: item.item_name,
-                            sku: variant.sku || '',
-                            barcode: variant.barcode || '',
-                            variantId: variant.variant_id,
-                            price: store.price
-                        });
-                    }
+    try {
+        while(url){
+            const res = await fetch(workerUrl + url);
+            const data = await res.json();
+            (data.items||[]).forEach(item=>{
+                item.variants.forEach(v=>{
+                    v.stores.forEach(s=>{
+                        if(s.available_for_sale){
+                            sellableVariants.push({
+                                name:item.item_name,
+                                sku:v.sku||'',
+                                barcode:v.barcode||'',
+                                variantId:v.variant_id,
+                                price:s.price
+                            });
+                        }
+                    });
                 });
             });
-        });
-
+            url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
+        }
         displayItems(sellableVariants);
-        status.innerHTML = `<span class="success">Productos cargados: ${sellableVariants.length}</span>`;
+        status.innerHTML = `<span class="success">Productos cargados</span>`;
+    } catch(e){
+        status.innerHTML = `<span class="error">${e.message}</span>`;
     }
+}
 
-    /* ==========================
-       MOSTRAR PRODUCTOS
-    ========================== */
-    function displayItems(items) {
-        const tbody = document.getElementById('productsBody');
-        tbody.innerHTML = '';
+function displayItems(items){
+    const tb=document.getElementById('productsBody');
+    tb.innerHTML='';
+    items.forEach(i=>{
+        const r=document.createElement('tr');
+        r.innerHTML=`
+        <td>${i.name}</td>
+        <td>${i.sku||'-'}</td>
+        <td>${i.price.toFixed(2)}</td>
+        <td><button>Agregar</button></td>`;
+        r.querySelector('button').onclick=()=>addToCart(i);
+        tb.appendChild(r);
+    });
+}
 
-        items.forEach(item => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${item.name}</td>
-                <td>${item.sku || '-'}</td>
-                <td>${item.price.toFixed(2)}</td>
-                <td><button>Agregar</button></td>
-            `;
-            row.querySelector('button').onclick =
-                () => addToCart(item.name, item.variantId, item.price);
-            tbody.appendChild(row);
-        });
+function filterItems(){
+    const s=document.getElementById('searchInput').value.toLowerCase();
+    displayItems(sellableVariants.filter(v =>
+        v.name.toLowerCase().includes(s) ||
+        v.sku.toLowerCase().includes(s) ||
+        v.barcode.toLowerCase().includes(s)
+    ));
+}
+
+/* ====================== */
+function addToCart(item){
+    const e=cart.find(i=>i.variantId===item.variantId);
+    e?e.quantity++:cart.push({...item,quantity:1});
+    updateCart();
+}
+
+function updateCart(){
+    const tb=document.getElementById('cartBody');
+    tb.innerHTML='';
+    cart.forEach((i,idx)=>{
+        const r=document.createElement('tr');
+        r.innerHTML=`
+        <td>${i.name}</td>
+        <td><input type="number" min="1" value="${i.quantity}" onchange="updateQty(${idx},this.value)" style="width:60px"></td>
+        <td>${i.price.toFixed(2)}</td>
+        <td>${(i.price*i.quantity).toFixed(2)}</td>
+        <td><button onclick="removeItem(${idx})" style="background:#f44336">X</button></td>`;
+        tb.appendChild(r);
+    });
+    document.getElementById('totalLabel').textContent=`Total: ${getCartTotal().toFixed(2)} BOB`;
+    updateChange();
+}
+
+function updateQty(i,v){ cart[i].quantity=Math.max(1,parseInt(v)||1); updateCart(); }
+function removeItem(i){ cart.splice(i,1); updateCart(); }
+
+function clearCart(){
+    cart=[];
+    updateCart();
+    document.getElementById('paymentAmount').value='';
+    document.getElementById('changeMessage').textContent='';
+}
+
+/* ====================== */
+function updateChange(){
+    const pay=parseFloat(paymentAmount.value);
+    const total=getCartTotal();
+    if(!pay){ changeMessage.textContent=''; return; }
+    if(pay<total){
+        changeMessage.innerHTML=`<span class="error">Faltan ${(total-pay).toFixed(2)} BOB</span>`;
+    }else{
+        changeMessage.innerHTML=`<span class="success">Cambio ${(pay-total).toFixed(2)} BOB</span>`;
     }
+}
 
-    function filterItems() {
-        const search = document.getElementById('searchInput').value.toLowerCase();
-        displayItems(
-            sellableVariants.filter(v =>
-                v.name.toLowerCase().includes(search) ||
-                v.sku.toLowerCase().includes(search) ||
-                v.barcode.toLowerCase().includes(search)
-            )
-        );
-    }
+/* ====================== */
+async function registerSale(){
+    const total=getCartTotal();
+    const pay=parseFloat(paymentAmount.value)||0;
+    if(!cart.length) return alert('Carrito vacío');
+    if(pay<total) return alert('Pago insuficiente');
 
-    /* ==========================
-       CARRITO
-    ========================== */
-    function addToCart(name, variantId, price) {
-        const item = cart.find(i => i.variantId === variantId);
-        if (item) item.quantity++;
-        else cart.push({ name, variantId, price, quantity: 1 });
-        updateCart();
-    }
-
-    function updateCart() {
-        const tbody = document.getElementById('cartBody');
-        tbody.innerHTML = '';
-
-        cart.forEach((item, index) => {
-            const subtotal = item.price * item.quantity;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${item.name}</td>
-                <td>
-                    <input type="number" min="1" value="${item.quantity}"
-                        style="width:60px"
-                        onchange="updateQuantity(${index}, this.value)">
-                </td>
-                <td>${item.price.toFixed(2)}</td>
-                <td>${subtotal.toFixed(2)}</td>
-                <td><button style="background:#f44336" onclick="removeFromCart(${index})">X</button></td>
-            `;
-            tbody.appendChild(row);
-        });
-
-        document.getElementById('totalLabel').textContent =
-            `Total: ${getCartTotal().toFixed(2)} BOB`;
-
-        updateChange();
-    }
-
-    function updateQuantity(index, qty) {
-        cart[index].quantity = Math.max(1, parseInt(qty) || 1);
-        updateCart();
-    }
-
-    function removeFromCart(index) {
-        cart.splice(index, 1);
-        updateCart();
-    }
-
-    function clearCart() {
-        cart = [];
-        updateCart();
-        document.getElementById('paymentAmount').value = '';
-        document.getElementById('changeMessage').textContent = '';
-    }
-
-    /* ==========================
-       CAMBIO EN TIEMPO REAL
-    ========================== */
-    function updateChange() {
-        const payment = parseFloat(document.getElementById('paymentAmount').value);
-        const total = getCartTotal();
-        const msg = document.getElementById('changeMessage');
-
-        if (!payment) {
-            msg.textContent = '';
-            return;
-        }
-
-        if (payment < total) {
-            msg.innerHTML = `<span class="error">Faltan ${(total - payment).toFixed(2)} BOB</span>`;
-            return;
-        }
-
-        msg.innerHTML = `<span class="success">Cambio: ${(payment - total).toFixed(2)} BOB</span>`;
-    }
-
-    /* ==========================
-       REGISTRAR VENTA
-    ========================== */
-    async function registerSale() {
-        const storeId = document.getElementById('storeId').value.trim();
-        const payment = parseFloat(document.getElementById('paymentAmount').value) || 0;
-        const total = getCartTotal();
-
-        if (!cart.length) return alert("El carrito está vacío");
-        if (payment < total) return alert("Pago insuficiente");
-
-        const receipt = {
-            receipt_type: "SALE",
-            store_id: storeId,
-            line_items: cart.map(i => ({
-                variant_id: i.variantId,
-                quantity: i.quantity,
-                price: i.price
+    await fetch(workerUrl+'/v1.0/receipts',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            receipt_type:'SALE',
+            line_items:cart.map(i=>({
+                variant_id:i.variantId,
+                quantity:i.quantity,
+                price:i.price
             })),
-            payments: [{
-                amount: payment,
-                payment_type_id: "080f1ca3-0aea-410b-9d27-801e6c7a6c58"
+            payments:[{
+                amount:pay,
+                payment_type_id:'080f1ca3-0aea-410b-9d27-801e6c7a6c58'
             }]
-        };
+        })
+    });
 
-        await fetch(workerUrl + '/v1.0/receipts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(receipt)
-        });
+    clearCart();
+    alert('Venta registrada');
+}
 
-        clearCart();
-        alert("Venta registrada correctamente");
-    }
+loadItems();
 </script>
-
 </body>
 </html>
