@@ -51,7 +51,17 @@ th { background:#f2f2f2; }
 <input id="searchInput" placeholder="Buscar..." oninput="filterItems()">
 
 <table>
-<thead><tr><th>Nombre</th><th>Stock</th><th>Precio</th><th></th></tr></thead>
+<thead>
+<tr>
+    <th>Nombre</th>
+    <th>Categoría</th>
+    <th>Barcode</th>
+    <th>Stock</th>
+    <th>Precio</th>
+    <th></th>
+</tr>
+</thead>
+
 <tbody id="productsBody"></tbody>
 </table>
 </div>
@@ -90,51 +100,90 @@ let cart = [];
 /* ===================== */
 function getTotal(){ return cart.reduce((s,i)=>s+i.price*i.qty,0); }
 
+    
 /* ===================== */
-async function loadItems(){
-  const res = await fetch(workerUrl+'/v1.0/items?limit=250');
-  const data = await res.json();
+async function loadInventory() {
+    let inventory = {};
+    let url = '/v1.0/inventory?limit=250';
 
-  items = [];
-  data.items.forEach(it=>{
-    it.variants.forEach(v=>{
-      v.stores.forEach(s=>{
-        if(s.available_for_sale){
-          items.push({
-            name: it.item_name,
-            barcode: v.barcode || '',
-            variantId: v.variant_id,
-            price: s.price,
-            stock: s.stock_level ?? 9999
-          });
-        }
-      });
-    });
-  });
-  renderProducts(items);
+    while (url) {
+        const res = await fetch(workerUrl + url);
+        const data = await res.json();
+
+        (data.inventory || []).forEach(i => {
+            inventory[i.variant_id] = i.in_stock;
+        });
+
+        url = data.cursor ? `/v1.0/inventory?limit=250&cursor=${data.cursor}` : null;
+    }
+
+    return inventory;
 }
-loadItems();
+    
+/* ===================== */
+    
+async function loadItems() {
+    const status = document.getElementById('statusMessage');
+    status.textContent = 'Cargando productos...';
+
+    items = [];
+
+    const inventory = await loadInventory(); // 👈 STOCK REAL
+
+    let url = '/v1.0/items?limit=250';
+
+    while (url) {
+        const res = await fetch(workerUrl + url);
+        const data = await res.json();
+
+        (data.items || []).forEach(item => {
+            item.variants.forEach(variant => {
+                variant.stores.forEach(store => {
+                    if (store.available_for_sale) {
+                        items.push({
+                            name: item.item_name,
+                            category: item.category_name || '-',
+                            barcode: variant.barcode || '',
+                            sku: variant.sku || '',
+                            variantId: variant.variant_id,
+                            price: store.price,
+                            stock: inventory[variant.variant_id] ?? 0
+                        });
+                    }
+                });
+            });
+        });
+
+        url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
+    }
+
+    renderProducts(items);
+    status.innerHTML = `<span class="success">Productos cargados</span>`;
+}
+
 
 /* ===================== */
 function renderProducts(list){
-  const tb = productsBody;
-  tb.innerHTML='';
-  list.forEach(i=>{
-    const r=document.createElement('tr');
-    r.innerHTML=`
-      <td>${i.name}</td>
-      <td>${i.stock}</td>
-      <td>${i.price.toFixed(2)}</td>
-      <td><button ${i.stock<=0?'disabled':''}>+</button></td>`;
-    r.querySelector('button').onclick=()=>addToCart(i);
-    tb.appendChild(r);
-  });
+    const tb = productsBody;
+    tb.innerHTML = '';
+
+    list.forEach(i => {
+        const r = document.createElement('tr');
+        r.innerHTML = `
+            <td>${i.name}</td>
+            <td>${i.category}</td>
+            <td>${i.barcode || '-'}</td>
+            <td>${i.stock}</td>
+            <td>${i.price.toFixed(2)}</td>
+            <td>
+                <button ${i.stock <= 0 ? 'disabled' : ''}>+</button>
+            </td>
+        `;
+        r.querySelector('button').onclick = () => addToCart(i);
+        tb.appendChild(r);
+    });
 }
 
-function filterItems(){
-  const s=searchInput.value.toLowerCase();
-  renderProducts(items.filter(i=>i.name.toLowerCase().includes(s)));
-}
 
 /* ===================== */
 function addToCart(item){
