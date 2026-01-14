@@ -5,80 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Simple con Loyverse - Erik</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            background: #f9f9f9; 
-        }
-        .container {
-            display: flex;
-            gap: 25px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
+        .container { display: flex; gap: 25px; max-width: 1400px; margin: 0 auto; }
         .products-section { flex: 3; }
         .cart-section { 
-            flex: 1; 
-            background: white; 
-            padding: 20px; 
-            border-radius: 8px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-            position: sticky; 
-            top: 20px; 
-            height: fit-content; 
+            flex: 1; background: white; padding: 20px; border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: sticky; top: 20px; height: fit-content; 
         }
-        input, button { 
-            padding: 10px; 
-            margin: 8px 0; 
-            font-size: 16px; 
-            border-radius: 4px; 
-            border: 1px solid #ccc; 
-            width: 100%; 
-            box-sizing: border-box; 
-        }
-        button { 
-            background: #4CAF50; 
-            color: white; 
-            border: none; 
-            cursor: pointer; 
-        }
+        input, button { padding: 10px; margin: 8px 0; font-size: 16px; border-radius: 4px; 
+                        border: 1px solid #ccc; width: 100%; box-sizing: border-box; }
+        button { background: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background: #45a049; }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin: 15px 0; 
-            background: white; 
-        }
-        th, td { 
-            border: 1px solid #ddd; 
-            padding: 10px; 
-            text-align: left; 
-        }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #f2f2f2; }
-        .cart-total { 
-            font-weight: bold; 
-            font-size: 1.5em; 
-            margin: 15px 0; 
-            color: #d32f2f; 
-            text-align: right; 
-        }
+        .cart-total { font-weight: bold; font-size: 1.5em; margin: 15px 0; color: #d32f2f; text-align: right; }
         .error { color: red; font-weight: bold; }
         .success { color: green; font-weight: bold; }
         h1 { text-align: center; margin-bottom: 20px; }
-        @media (max-width: 900px) { 
-            .container { flex-direction: column; } 
-            .cart-section { position: static; } 
-        }
+        @media (max-width: 900px) { .container { flex-direction: column; } .cart-section { position: static; } }
     </style>
 </head>
 <body>
-    <h1>POS Simple con Loyverse</h1>
+    <h1>POS Simple con Loyverse Nuevo</h1>
 
     <div style="max-width: 600px; margin: 0 auto 20px;">
         <label for="storeId">Store ID:</label><br>
         <input type="text" id="storeId" placeholder="Ej: 78731809-f60c-4b28-9910-edfb8df5186c">
-        
         <button onclick="loadItems()">Cargar Productos</button>
     </div>
 
@@ -130,7 +83,7 @@
         const workerUrl = 'https://loyverse-proxy-erik.erikrojas76.workers.dev';
 
         async function loadItems() {
-            console.log("Iniciando carga de productos...");
+            console.log("Iniciando carga...");
             const storeId = document.getElementById('storeId').value.trim();
             const status = document.getElementById('statusMessage');
 
@@ -147,28 +100,19 @@
             while (urlPath) {
                 try {
                     const response = await fetch(workerUrl + urlPath);
-                    console.log("Respuesta del Worker:", response.status);
-
-                    if (!response.ok) {
-                        const err = await response.text();
-                        throw new Error(`Error ${response.status}: ${err}`);
-                    }
-
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const data = await response.json();
                     allItems = allItems.concat(data.items || []);
-
-                    const cursor = data.cursor;
-                    urlPath = cursor ? `/v1.0/items?limit=250&cursor=${cursor}` : null;
+                    urlPath = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
                 } catch (error) {
                     status.innerHTML = `<span class="error">Error al cargar: ${error.message}</span>`;
-                    console.error("Error completo:", error);
+                    console.error(error);
                     return;
                 }
             }
 
             displayItems(allItems);
             status.innerHTML = `<span class="success">¡Cargados ${allItems.length} productos!</span>`;
-            console.log("Productos cargados:", allItems.length);
         }
 
         function displayItems(items) {
@@ -185,7 +129,7 @@
                             <td>${item.item_name}</td>
                             <td>${variant.sku || '-'}</td>
                             <td>${storeInfo.price.toFixed(2)}</td>
-                            <td><button onclick="addToCart('${item.item_name}', '${variant.variant_id}', ${storeInfo.price})">Agregar</button></td>
+                            <td><button onclick="addToCart('${item.item_name.replace(/'/g, "\\'")}', '${variant.variant_id}', ${storeInfo.price})">Agregar</button></td>
                         `;
                         tbody.appendChild(row);
                     }
@@ -198,8 +142,8 @@
             const filtered = allItems.filter(item => 
                 item.item_name.toLowerCase().includes(search) ||
                 item.variants.some(v => 
-                    (v.sku && v.sku.toLowerCase().includes(search)) || 
-                    (v.barcode && v.barcode.toLowerCase().includes(search))
+                    (v.sku && v.sku.toLowerCase().includes(search)) ||
+                    (v.barcode && v.barcode?.toLowerCase().includes(search))
                 )
             );
             displayItems(filtered);
@@ -207,11 +151,8 @@
 
         function addToCart(name, variantId, price) {
             const existing = cart.find(i => i.variantId === variantId);
-            if (existing) {
-                existing.quantity += 1;
-            } else {
-                cart.push({ name, variantId, price, quantity: 1 });
-            }
+            if (existing) existing.quantity += 1;
+            else cart.push({ name, variantId, price, quantity: 1 });
             updateCart();
         }
 
@@ -278,9 +219,11 @@
                 })),
                 payments: [{
                     amount: payment,
-                    payment_type_id: "080f1ca3-0aea-410b-9d27-801e6c7a6c58"  // ¡Tu ID real para Efectivo!
+                    payment_type_id: "080f1ca3-0aea-410b-9d27-801e6c7a6c58"
                 }]
             };
+
+            console.log("JSON enviado a /receipts:", JSON.stringify(receipt, null, 2));
 
             try {
                 const response = await fetch(workerUrl + '/v1.0/receipts', {
@@ -299,7 +242,7 @@
                 clearCart();
             } catch (error) {
                 changeMsg.innerHTML = `<span class="error">Error: ${error.message}</span>`;
-                console.error("Error en venta:", error);
+                console.error(error);
             }
         }
     </script>
