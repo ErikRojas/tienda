@@ -275,6 +275,16 @@ function printTicket(){
   win.print();
   win.close();
 }
+/* ===================== */
+    function filterItems() {
+    const term = document.getElementById('searchInput').value.toLowerCase();
+    const filtered = items.filter(i => 
+        i.name.toLowerCase().includes(term) || 
+        i.barcode.includes(term) ||
+        i.category.toLowerCase().includes(term)
+    );
+    renderProducts(filtered);
+}
 </script>
 
 </body>
