@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Loyverse Pro</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f4f7f6; padding:20px; color: #333; margin:0; }
         .container { display:flex; gap:20px; max-width:1400px; margin:auto; }
         .products { flex:3; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; align-self:flex-start; }
+        .cart { flex:1; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.1); position:sticky; top:20px; align-self:flex-start; height: fit-content; }
         input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:4px; box-sizing: border-box; }
         button { width:100%; padding:12px; margin:6px 0; font-size:16px; border:none; border-radius:4px; cursor:pointer; font-weight: bold; }
         .btn-add { background:#4CAF50; color:#fff; }
@@ -17,24 +17,24 @@
         th, td { border-bottom:1px solid #eee; padding:10px; text-align: left; }
         th { background:#f8f9fa; font-size: 12px; color: #777; }
         .total { font-size:1.8em; font-weight:bold; color:#d32f2f; text-align:right; margin: 15px 0; }
-        .status-bar { background: #2c3e50; color: white; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; }
+        .status-bar { background: #2c3e50; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 4px; }
         .success { color: #2ecc71; }
         .error { color: #e74c3c; }
     </style>
 </head>
 <body>
 
-<div id="statusMessage" class="status-bar">Sincronizando con Loyverse...</div>
+<div id="statusMessage" class="status-bar">Iniciando sistema...</div>
 
 <div class="container">
     <div class="products">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2>Inventario Real</h2>
-            <button onclick="loadItems()" style="width: auto; background: #3498db; color: white; padding: 5px 15px;">🔄 Actualizar Stock</button>
+            <h2>Inventario Disponible</h2>
+            <button onclick="loadItems()" style="width: auto; background: #3498db; color: white; padding: 5px 15px;">🔄 Sincronizar Stock</button>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input id="barcodeInput" placeholder="Escaneo rápido de código..." autofocus>
-            <input id="searchInput" placeholder="Buscar producto o categoría..." oninput="filterItems()">
+            <input id="barcodeInput" placeholder="Escaneé código de barras..." autofocus>
+            <input id="searchInput" placeholder="Filtrar por nombre o categoría..." oninput="filterItems()">
         </div>
 
         <table>
@@ -54,7 +54,7 @@
 
     <div class="cart">
         <h2>Carrito</h2>
-        <table id="cartTable">
+        <table>
             <thead>
                 <tr><th>Item</th><th>Cant</th><th>Sub</th><th></th></tr>
             </thead>
@@ -63,12 +63,12 @@
 
         <div class="total" id="totalLabel">0.00 BOB</div>
 
-        <label>Monto Recibido</label>
+        <label>Monto Pagado</label>
         <input type="number" id="paymentAmount" step="0.5" placeholder="0.00" oninput="updateChange()">
         <div id="changeMessage" style="margin-bottom: 10px; font-weight: bold;"></div>
 
-        <button onclick="registerSale()" style="background: #27ae60; color: white;">FINALIZAR VENTA</button>
-        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">Vaciar Carrito</button>
+        <button onclick="registerSale()" style="background: #27ae60; color: white;">REGISTRAR VENTA</button>
+        <button onclick="clearCart()" style="background:#e74c3c; color: white; font-size: 12px;">Vaciar Todo</button>
     </div>
 </div>
 
@@ -82,7 +82,6 @@ let cart = [];
 /* --- CARGA DE DATOS --- */
 async function loadInventory() {
     let inventory = {};
-    // Intentamos cargar inventario sin filtros para obtener todo lo disponible
     let url = '/v1.0/inventory?limit=250';
     try {
         while (url) {
@@ -90,13 +89,12 @@ async function loadInventory() {
             const data = await res.json();
             if (data.inventory) {
                 data.inventory.forEach(i => {
-                    // Sumamos stock si la variante aparece en múltiples tiendas
                     inventory[i.variant_id] = (inventory[i.variant_id] || 0) + (i.in_stock || 0);
                 });
             }
             url = data.cursor ? `/v1.0/inventory?limit=250&cursor=${data.cursor}` : null;
         }
-    } catch(e) { console.error("Error en Stock:", e); }
+    } catch(e) { console.error("Error Stock:", e); }
     return inventory;
 }
 
@@ -112,19 +110,17 @@ async function loadCategories() {
             }
             url = data.cursor ? `/v1.0/categories?limit=250&cursor=${data.cursor}` : null;
         }
-    } catch(e) { console.error("Error en Categorías:", e); }
+    } catch(e) { console.error("Error Cat:", e); }
     return categories;
 }
 
 async function loadItems() {
     const status = document.getElementById('statusMessage');
     status.innerHTML = '⏳ Conectando con Loyverse...';
-    
     try {
         const [inventory, categories] = await Promise.all([loadInventory(), loadCategories()]);
         items = [];
         let url = '/v1.0/items?limit=250';
-
         while (url) {
             const res = await fetch(workerUrl + url);
             const data = await res.json();
@@ -149,13 +145,13 @@ async function loadItems() {
             url = data.cursor ? `/v1.0/items?limit=250&cursor=${data.cursor}` : null;
         }
         renderProducts(items);
-        status.innerHTML = `✅ <span class="success">${items.length} Productos sincronizados</span>`;
+        status.innerHTML = `✅ <span class="success">${items.length} Productos cargados con stock</span>`;
     } catch (e) {
-        status.innerHTML = `<span class="error">❌ Error de conexión. Revisa el Proxy.</span>`;
+        status.innerHTML = `<span class="error">❌ Error de conexión</span>`;
     }
 }
 
-/* --- LÓGICA DE CARRITO --- */
+/* --- LÓGICA DE TIENDA --- */
 function renderProducts(list) {
     const tb = document.getElementById('productsBody');
     tb.innerHTML = '';
@@ -165,10 +161,10 @@ function renderProducts(list) {
         r.innerHTML = `
             <td>${i.name}</td>
             <td>${i.category}</td>
-            <td><small>${i.barcode}</small></td>
+            <td><small>${i.barcode || '-'}</small></td>
             <td style="color:${out?'red':'green'}"><b>${i.stock}</b></td>
             <td>${i.price.toFixed(2)}</td>
-            <td><button class="btn-add" ${out?'disabled':''} onclick="addToCartByVId('${i.variantId}')">${out?'S/S':'+'}</button></td>
+            <td><button class="btn-add" ${out?'disabled':''} onclick="addToCartByVId('${i.variantId}')">${out?'Agotado':'+'}</button></td>
         `;
         tb.appendChild(r);
     });
@@ -191,7 +187,7 @@ function updateCart() {
     cart.forEach((i, idx) => {
         const r = document.createElement('tr');
         r.innerHTML = `<td>${i.name}</td><td>${i.qty}</td><td>${(i.price*i.qty).toFixed(2)}</td>
-        <td><button onclick="removeItem(${idx})" style="background:none; color:red; border:none;">✕</button></td>`;
+        <td><button onclick="removeItem(${idx})" style="background:none; color:red; border:none; cursor:pointer;">✕</button></td>`;
         cb.appendChild(r);
     });
     const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
@@ -226,7 +222,7 @@ async function registerSale() {
     if (!cart.length) return alert('Carrito vacío');
     const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     
-    document.getElementById('statusMessage').innerHTML = '⏳ Registrando en Loyverse...';
+    document.getElementById('statusMessage').innerHTML = '⏳ Registrando venta...';
 
     try {
         const res = await fetch(workerUrl + '/v1.0/receipts', {
@@ -240,48 +236,43 @@ async function registerSale() {
         });
 
         if (res.ok) {
-            if (confirm('✅ Venta registrada con éxito. ¿Desea imprimir el ticket?')) {
-                printTicket();
+            // Guardamos el carrito temporal para el ticket antes de borrarlo
+            const tempCart = [...cart];
+            const tempTotal = total;
+            
+            if (confirm('✅ Venta registrada. ¿Desea imprimir el comprobante?')) {
+                printTicket(tempCart, tempTotal);
             }
+            
             cart = [];
             updateCart();
-            loadItems(); // Recarga stock real
+            document.getElementById('paymentAmount').value = '';
+            loadItems(); // Recarga stock real tras la venta
         } else {
-            alert('Error al registrar la venta.');
+            alert('Error al registrar la venta. Verifique conexión.');
         }
-    } catch (e) { alert('Error de conexión con el servidor.'); }
+    } catch (e) { alert('Error crítico de red.'); }
 }
 
-function printTicket() {
+function printTicket(ticketData, total) {
     const win = window.open('', '', 'width=300');
-    const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const fecha = new Date().toLocaleString();
-
     win.document.write(`
-        <html><body style="font-family:monospace; width:100%; font-size:12px;">
+        <html><body style="font-family:monospace; padding:10px; font-size:12px;">
             <div style="text-align:center;">
-                <h3>MI TIENDA</h3>
+                <h2 style="margin:0;">MI NEGOCIO</h2>
                 <p>${fecha}</p>
                 <hr>
             </div>
-            <table style="width:100%; font-size:12px;">
-                ${cart.map(i => `
-                    <tr>
-                        <td colspan="2">${i.name}</td>
-                    </tr>
-                    <tr>
-                        <td>${i.qty} x ${i.price.toFixed(2)}</td>
-                        <td style="text-align:right;">${(i.qty*i.price).toFixed(2)}</td>
-                    </tr>
+            <table style="width:100%; border-collapse:collapse;">
+                ${ticketData.map(i => `
+                    <tr><td colspan="2">${i.name}</td></tr>
+                    <tr><td>${i.qty} x ${i.price.toFixed(2)}</td><td style="text-align:right;">${(i.qty*i.price).toFixed(2)}</td></tr>
                 `).join('')}
             </table>
             <hr>
-            <div style="text-align:right; font-size:14px;">
-                <b>TOTAL: ${total.toFixed(2)} BOB</b>
-            </div>
-            <div style="text-align:center; margin-top:20px;">
-                <p>¡Gracias por su compra!</p>
-            </div>
+            <div style="text-align:right; font-size:14px;"><b>TOTAL: ${total.toFixed(2)} BOB</b></div>
+            <p style="text-align:center; margin-top:20px;">¡Gracias por preferirnos!</p>
             <script>window.onload = function() { window.print(); window.close(); }</script>
         </body></html>
     `);
@@ -297,6 +288,7 @@ document.getElementById('barcodeInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         const i = items.find(x => x.barcode === e.target.value.trim());
         if (i) addToCartByVId(i.variantId);
+        else alert("Producto no encontrado");
         e.target.value = '';
     }
 });
