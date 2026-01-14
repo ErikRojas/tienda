@@ -185,12 +185,14 @@ function addToCart(item){
   renderProducts(items);
 }
 
+/* === CORRECCIÓN EN UPDATE CART (Agregada columna Cantidad) === */
 function updateCart(){
   cartBody.innerHTML='';
   cart.forEach((i,idx)=>{
     const r=document.createElement('tr');
     r.innerHTML=`
       <td>${i.name}</td>
+      <td>${i.qty}</td>
       <td>${(i.price*i.qty).toFixed(2)}</td>
       <td><button onclick="removeItem(${idx})">X</button></td>`;
     cartBody.appendChild(r);
@@ -198,6 +200,10 @@ function updateCart(){
   totalLabel.textContent=`Total: ${getTotal().toFixed(2)} BOB`;
   updateChange();
 }
+
+/* === RECOMENDACIÓN: Agregar el inicio de carga === */
+// Al final de tu <script>, asegúrate de llamar a la función para que los productos carguen al abrir
+loadItems();
 
 function removeItem(i){
   items.find(x=>x.variantId===cart[i].variantId).stock+=cart[i].qty;
